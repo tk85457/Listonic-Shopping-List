@@ -1,0 +1,47 @@
+# Miscellaneous
+*.log
+*.pyc
+*.swp
+.DS_Store
+.history
+.env
+*.txt
+*.md
+!README.md
+!SUPABASE_SETUP_GUIDE.md
+!TROUBLESHOOTING.md
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Visual Studio Code related
+.vscode/
+
+# Build directories
+build/
+**/build/
+**/ios/build/
+**/android/build/
+**/windows/build/
+**/linux/build/
+**/macos/build/
+
+# SDKs and Zips
+*.zip
+*.tar.gz
+*.rar
+*.7z
+firebase_cpp_sdk_windows*
+
+# Android artifacts
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# SQLite and Web artifacts
+*.wasm
+*.sqlite
