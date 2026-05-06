@@ -9,7 +9,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:131313541478:android:64ee8701a5379ae84ce8a7",
         "android_client_info": {
-          "package_name": "com.smartgrocery.smartgrocerylist"
+          "package_name": "com.tk854.listonic"
         }
       },
       "oauth_client": [
@@ -17,7 +17,7 @@
           "client_id": "131313541478-ff2k3edpcavrr9ssregogeqv8ou6ltah.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.smartgrocery.smartgrocerylist",
+            "package_name": "com.tk854.listonic",
             "certificate_hash": "214561fb0596299b948c276f1ea628c2ffba9fa6"
           }
         },

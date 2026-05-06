@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:smartgrocerylist/controllers/auth_controller.dart';
+import 'package:grocerylist/controllers/auth_controller.dart';
 
 class NameRequestDialog extends StatefulWidget {
   const NameRequestDialog({super.key});
@@ -14,7 +14,7 @@ class NameRequestDialog extends StatefulWidget {
 class _NameRequestDialogState extends State<NameRequestDialog> {
   final TextEditingController _nameController = TextEditingController();
   final AuthController _authController = Get.find();
-  bool _isLoading = false;
+  final bool _isLoading = false;
 
   Future<void> _submit() async {
     final name = _nameController.text.trim();
@@ -53,10 +53,20 @@ class _NameRequestDialogState extends State<NameRequestDialog> {
             const SizedBox(height: 24),
             TextField(
               controller: _nameController,
+              style: TextStyle(color: colorScheme.onSurface), // Force visible text color
               decoration: InputDecoration(
                 labelText: 'Full Name',
-                prefixIcon: const Icon(Icons.person_outline),
+                labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+                prefixIcon: Icon(Icons.person_outline, color: colorScheme.onSurfaceVariant),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(color: colorScheme.outline),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(color: colorScheme.primary, width: 2),
+                ),
               ),
               textCapitalization: TextCapitalization.words,
             ),
@@ -91,3 +101,4 @@ class _NameRequestDialogState extends State<NameRequestDialog> {
     );
   }
 }
+

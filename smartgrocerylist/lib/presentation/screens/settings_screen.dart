@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:smartgrocerylist/controllers/theme_controller.dart';
-import 'package:smartgrocerylist/core/themes/app_theme.dart';
-import 'package:smartgrocerylist/presentation/screens/premium_screen.dart';
-import 'package:smartgrocerylist/presentation/screens/trash_screen.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:grocerylist/controllers/theme_controller.dart';
+import 'package:grocerylist/core/themes/app_theme.dart';
+import 'package:grocerylist/core/services/snackbar_service.dart';
+import 'package:grocerylist/presentation/screens/trash_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -20,237 +19,217 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _notifications = true;
   bool _aiSuggestions = true;
-  bool _isGuest = false;
-  bool _isPremium = false;
-  String _selectedTheme = 'System';
-  String _selectedColor = 'Emerald';
-  late ThemeController _themeController;
+  late ThemeController _tc;
+
+  // Helper: convert ThemeMode → display string
+  String _modeLabel(ThemeMode m) => m == ThemeMode.light
+      ? 'Light'
+      : m == ThemeMode.dark
+      ? 'Dark'
+      : 'System';
+
+  // Helper: display string → ThemeMode
+  ThemeMode _modeFromLabel(String s) => s == 'Light'
+      ? ThemeMode.light
+      : s == 'Dark'
+      ? ThemeMode.dark
+      : ThemeMode.system;
+
+  // Helper: double factor → display string
+  String _sizeLabel(double f) => f <= 0.8
+      ? 'Small'
+      : f <= 1.0
+      ? 'Medium'
+      : f <= 1.2
+      ? 'Large'
+      : 'Extra Large';
+
+  // Helper: display string → double factor
+  double _factorFromLabel(String s) => s == 'Small'
+      ? 0.8
+      : s == 'Large'
+      ? 1.2
+      : s == 'Extra Large'
+      ? 1.4
+      : 1.0;
 
   @override
   void initState() {
     super.initState();
-    _themeController = Get.find<ThemeController>();
-    _loadSettings();
+    _tc = Get.find<ThemeController>();
+    _loadPrefs();
   }
 
-  Future<void> _loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _isGuest = prefs.getBool('isGuest') ?? false;
-      _isPremium = prefs.getBool('isPremium') ?? false;
-      _notifications = prefs.getBool('notifications') ?? true;
-      _aiSuggestions = prefs.getBool('ai_suggestions') ?? true;
-      _selectedTheme = prefs.getString('theme_mode') ?? 'System';
-      _selectedColor = _themeController.currentThemeColor.value;
-    });
-  }
-
-  Future<void> _saveSetting(String key, dynamic value) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (value is bool) {
-      await prefs.setBool(key, value);
-    } else if (value is String) {
-      await prefs.setString(key, value);
+  Future<void> _loadPrefs() async {
+    final p = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _notifications = p.getBool('notifications') ?? true;
+        _aiSuggestions = p.getBool('ai_suggestions') ?? true;
+      });
     }
   }
 
-  void _onAISuggestionsChanged(bool value) {
-    setState(() {
-      _aiSuggestions = value;
-    });
-    _saveSetting('ai_suggestions', value);
-  }
-
-  void _onThemeChanged(String? value) {
-    if (value == null) return;
-    setState(() {
-      _selectedTheme = value;
-    });
-    _saveSetting('theme_mode', value);
-
-    ThemeMode themeMode;
-    switch (value) {
-      case 'Light':
-        themeMode = ThemeMode.light;
-        break;
-      case 'Dark':
-        themeMode = ThemeMode.dark;
-        break;
-      default:
-        themeMode = ThemeMode.system;
-    }
-    _themeController.changeThemeMode(themeMode);
-  }
-
-  Future<void> _onColorChanged(String colorName) async {
-    setState(() {
-      _selectedColor = colorName;
-    });
-    await _themeController.changeThemeColor(colorName);
-  }
-
-  String _getFontSizeString(double factor) {
-    if (factor <= 0.8) return 'Small';
-    if (factor <= 1.0) return 'Medium';
-    if (factor <= 1.2) return 'Large';
-    return 'Extra Large';
-  }
-
-  double _getFontSizeFactor(String size) {
-    switch (size) {
-      case 'Small': return 0.8;
-      case 'Medium': return 1.0;
-      case 'Large': return 1.2;
-      case 'Extra Large': return 1.4;
-      default: return 1.0;
-    }
+  Future<void> _savePref(String key, dynamic v) async {
+    final p = await SharedPreferences.getInstance();
+    if (v is bool) await p.setBool(key, v);
+    if (v is String) await p.setString(key, v);
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSectionHeader('Appearance'),
-            _buildDropdownTile(
-              icon: Icons.dark_mode_outlined,
-              title: 'Theme Mode',
-              subtitle: 'Current mode: $_selectedTheme',
-              selectedItem: _selectedTheme,
-              items: const ['Light', 'Dark', 'System'],
-              onChanged: _onThemeChanged,
+            // ── APPEARANCE ─────────────────────────────────────────
+            _Section(label: 'Appearance'),
+            _SettingsCard(
+              children: [
+                // Theme Mode — driven entirely by ThemeController observable
+                Obx(
+                  () => _DropTile(
+                    icon: Icons.dark_mode_outlined,
+                    title: 'Theme Mode',
+                    selected: _modeLabel(_tc.currentThemeMode.value),
+                    items: const ['Light', 'Dark', 'System'],
+                    onChanged: (v) {
+                      if (v == null) return;
+                      HapticFeedback.selectionClick();
+                      _tc.changeThemeMode(_modeFromLabel(v));
+                    },
+                  ),
+                ),
+
+                _Divider(),
+
+                // Font Family
+                Obx(
+                  () => _DropTile(
+                    icon: Icons.font_download_outlined,
+                    title: 'Font Family',
+                    selected: _tc.currentFontFamily.value,
+                    items: AppTheme.availableFonts,
+                    onChanged: (v) {
+                      if (v == null) return;
+                      HapticFeedback.selectionClick();
+                      _tc.updateFontFamily(v);
+                    },
+                  ),
+                ),
+
+                _Divider(),
+
+                // Text Size
+                Obx(
+                  () => _DropTile(
+                    icon: Icons.format_size_rounded,
+                    title: 'Text Size',
+                    selected: _sizeLabel(_tc.currentFontSizeFactor.value),
+                    items: const ['Small', 'Medium', 'Large', 'Extra Large'],
+                    onChanged: (v) {
+                      if (v == null) return;
+                      HapticFeedback.selectionClick();
+                      _tc.updateFontSize(_factorFromLabel(v));
+                    },
+                  ),
+                ),
+              ],
             ),
-            Obx(() => _buildDropdownTile(
-              icon: Icons.font_download_outlined,
-              title: 'Font Family',
-              subtitle: 'Current: ${_themeController.currentFontFamily.value}',
-              selectedItem: _themeController.currentFontFamily.value,
-              items: AppTheme.availableFonts,
-              showPremiumLock: !_isPremium,
-              onChanged: (value) {
-                if (!_isPremium) {
-                  _showPremiumFeatureSnackbar('Custom Fonts');
-                  return;
-                }
-                if (value != null) {
-                  _themeController.updateFontFamily(value);
-                }
-              },
-            )),
-            Obx(() => _buildDropdownTile(
-              icon: Icons.format_size_rounded,
-              title: 'Text Size',
-              subtitle: 'Adjust readability',
-              selectedItem: _getFontSizeString(_themeController.currentFontSizeFactor.value),
-              items: const ['Small', 'Medium', 'Large', 'Extra Large'],
-              showPremiumLock: !_isPremium,
-              onChanged: (value) {
-                if (!_isPremium) {
-                  _showPremiumFeatureSnackbar('Adjustable Font Size');
-                  return;
-                }
-                if (value != null) {
-                  _themeController.updateFontSize(_getFontSizeFactor(value));
-                }
-              },
-            )),
-            Obx(() => _buildColorThemeTile(
-              icon: Icons.palette_outlined,
-              title: 'Color Theme',
-              subtitle: 'Personalize your workspace',
-              selectedColor: _themeController.currentThemeColor.value,
-              onChanged: _onColorChanged,
-            )),
+
+            const SizedBox(height: 6),
+
+            // Color Picker
+            _ColorPicker(tc: _tc),
+
             const SizedBox(height: 24),
 
-            _buildSectionHeader('Features'),
-            _buildToggleTile(
-              icon: Icons.notifications_none_rounded,
-              title: 'Notifications',
-              subtitle: 'Reminders for shopping & items',
-              value: _notifications,
-              onChanged: (value) async {
-                if (value) {
-                  final status = await Permission.notification.request();
-                  if (status.isDenied || status.isPermanentlyDenied) {
-                    Get.snackbar(
-                      'Permission Denied',
-                      'Please enable notifications in system settings.',
-                      snackPosition: SnackPosition.BOTTOM,
-                      backgroundColor: Colors.orange.shade100,
-                    );
-                    setState(() => _notifications = false);
-                    await _saveSetting('notifications', false);
-                    return;
-                  }
-                }
-                setState(() => _notifications = value);
-                await _saveSetting('notifications', value);
-              },
+            // ── FEATURES ───────────────────────────────────────────
+            _Section(label: 'Features'),
+            _SettingsCard(
+              children: [
+                _SwitchTile(
+                  icon: Icons.notifications_outlined,
+                  title: 'Notifications',
+                  subtitle: 'Reminders & smart alerts',
+                  value: _notifications,
+                  onChanged: (v) async {
+                    if (v) {
+                      final status = await Permission.notification.request();
+                      if (status.isDenied || status.isPermanentlyDenied) {
+                        SnackbarService.showWarning(
+                          'Permission Needed',
+                          'Enable notifications in your device settings',
+                        );
+                        setState(() => _notifications = false);
+                        _savePref('notifications', false);
+                        return;
+                      }
+                    }
+                    setState(() => _notifications = v);
+                    _savePref('notifications', v);
+                  },
+                ),
+                _Divider(),
+                _SwitchTile(
+                  icon: Icons.auto_awesome_outlined,
+                  title: 'AI Suggestions',
+                  subtitle: 'Smart item recommendations',
+                  value: _aiSuggestions,
+                  onChanged: (v) {
+                    setState(() => _aiSuggestions = v);
+                    _savePref('ai_suggestions', v);
+                  },
+                ),
+              ],
             ),
-            _buildToggleTile(
-              icon: Icons.auto_awesome_outlined,
-              title: 'AI Suggestions',
-              subtitle: 'Smart recommendations',
-              value: _aiSuggestions,
-              onChanged: _onAISuggestionsChanged,
-            ),
+
             const SizedBox(height: 24),
 
-            _buildSectionHeader('Account'),
-            if (!_isPremium)
-              _buildPremiumPromo()
-            else
-              _buildNavigationTile(
-                icon: Icons.workspace_premium_rounded,
-                title: 'Premium Plan',
-                subtitle: 'Manage your subscription',
-                onTap: _navigateToPremium,
-              ),
-
-            _buildNavigationTile(
-              icon: Icons.delete_sweep_outlined,
-              title: 'Trash',
-              subtitle: 'Recover deleted lists and items',
-              onTap: () => Get.to(() => const TrashScreen()),
-            ),
-            _buildNavigationTile(
-              icon: Icons.help_outline_rounded,
-              title: 'Help Center',
-              subtitle: 'FAQs and tutorials',
-              onTap: () => Get.toNamed('/faq'),
-            ),
-            _buildNavigationTile(
-              icon: Icons.privacy_tip_outlined,
-              title: 'Privacy Policy',
-              subtitle: 'Read our terms and policy',
-              onTap: () => Get.toNamed('/privacy-policy'),
+            // ── MORE ───────────────────────────────────────────────
+            _Section(label: 'More'),
+            _SettingsCard(
+              children: [
+                _NavTile(
+                  icon: Icons.delete_sweep_outlined,
+                  title: 'Trash',
+                  subtitle: 'Recover deleted items',
+                  color: cs.secondary,
+                  onTap: () => Get.to(() => const TrashScreen()),
+                ),
+                _Divider(),
+                _NavTile(
+                  icon: Icons.help_outline_rounded,
+                  title: 'Help & FAQ',
+                  subtitle: 'Tutorials and answers',
+                  onTap: () => Get.toNamed('/faq'),
+                ),
+                _Divider(),
+                _NavTile(
+                  icon: Icons.shield_outlined,
+                  title: 'Privacy Policy',
+                  subtitle: 'How we handle your data',
+                  onTap: () => Get.toNamed('/privacy-policy'),
+                ),
+              ],
             ),
 
-            const SizedBox(height: 48),
+            const SizedBox(height: 40),
+
+            // ── FOOTER ─────────────────────────────────────────────
             Center(
-              child: Column(
-                children: [
-                  Text(
-                    'Smart Grocery List',
-                    style: GoogleFonts.outfit(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.onSurface.withOpacity(0.7),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'v1.2.5 • Premium Edition',
-                    style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 13),
-                  ),
-                ],
+              child: Text(
+                'Listonic - Shopping List',
+                style: GoogleFonts.outfit(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface.withValues(alpha: 0.3),
+                ),
               ),
             ),
           ],
@@ -258,320 +237,304 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
+}
 
-  void _navigateToPremium() async {
-    final prefs = await SharedPreferences.getInstance();
-    final bool isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+// ─────────────────────────────────────────────────────────────────────────────
+// Reusable sub-widgets
+// ─────────────────────────────────────────────────────────────────────────────
 
-    if (isLoggedIn) {
-      Get.to(() => const PremiumScreen());
-    } else {
-      Get.toNamed('/signin');
-      Get.snackbar(
-        'Login Required',
-        'Please sign in to view premium plans.',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.blue.shade100,
-      );
-    }
-  }
+class _Section extends StatelessWidget {
+  final String label;
+  const _Section({required this.label});
 
-  void _showPremiumFeatureSnackbar(String feature) {
-    Get.snackbar(
-      'Premium Feature',
-      '$feature is only available for Premium members.',
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: Colors.amber.shade100,
-      mainButton: TextButton(
-        onPressed: () => _navigateToPremium(),
-        child: const Text('Upgrade', style: TextStyle(fontWeight: FontWeight.bold)),
-      ),
-    );
-  }
-
-  Widget _buildPremiumPromo() {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [colorScheme.primary, colorScheme.secondary],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.primary.withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: _navigateToPremium,
-          borderRadius: BorderRadius.circular(24),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 28),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Unlock Full Potential',
-                        style: GoogleFonts.outfit(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      const Text(
-                        'Get AI insights and unlimited lists',
-                        style: TextStyle(color: Colors.white70, fontSize: 13),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white70, size: 16),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ).animate(onPlay: (controller) => controller.repeat(reverse: true))
-     .shimmer(delay: const Duration(seconds: 2), duration: const Duration(milliseconds: 1500), color: Colors.white24);
-  }
-
-  Widget _buildSectionHeader(String title) {
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 12, top: 4),
+      padding: const EdgeInsets.only(left: 4, bottom: 10, top: 4),
       child: Text(
-        title.toUpperCase(),
+        label.toUpperCase(),
         style: GoogleFonts.outfit(
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.2,
-          color: Theme.of(context).colorScheme.primary,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.5,
+          color: cs.primary,
         ),
       ),
     );
   }
+}
 
-  Widget _buildTileContainer({required Widget child}) {
+class _SettingsCard extends StatelessWidget {
+  final List<Widget> children;
+  const _SettingsCard({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.3)),
-      ),
-      child: child,
-    );
-  }
-
-  Widget _buildToggleTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return _buildTileContainer(
-      child: SwitchListTile(
-        secondary: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: colorScheme.primaryContainer.withOpacity(0.4),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(icon, color: colorScheme.primary, size: 22),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.07)
+              : Colors.black.withValues(alpha: 0.07),
         ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-        subtitle: Text(subtitle, style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
-        value: value,
-        onChanged: onChanged,
-        activeColor: colorScheme.primary,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       ),
+      child: Column(children: children),
     );
   }
+}
 
-  Widget _buildDropdownTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required String selectedItem,
-    required List<String> items,
-    required ValueChanged<String?> onChanged,
-    bool showPremiumLock = false,
-  }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return _buildTileContainer(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: colorScheme.primaryContainer.withOpacity(0.4),
-                borderRadius: BorderRadius.circular(12),
+class _Divider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Divider(
+    height: 1,
+    indent: 56,
+    endIndent: 16,
+    color: Theme.of(context).dividerColor,
+  );
+}
+
+// ── Switch tile ───────────────────────────────────────────────────────────────
+class _SwitchTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _SwitchTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return SwitchListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      secondary: _IconBadge(icon: icon, color: cs.primary),
+      title: Text(
+        title,
+        style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 15),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: GoogleFonts.outfit(fontSize: 12, color: cs.onSurfaceVariant),
+      ),
+      value: value,
+      onChanged: onChanged,
+    );
+  }
+}
+
+// ── Dropdown tile ─────────────────────────────────────────────────────────────
+class _DropTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String selected;
+  final List<String> items;
+  final ValueChanged<String?> onChanged;
+
+  const _DropTile({
+    required this.icon,
+    required this.title,
+    required this.selected,
+    required this.items,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    // Guard: if selected not in items (e.g. after reactive update), fall back
+    final safeSelected = items.contains(selected) ? selected : items.first;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          _IconBadge(icon: icon, color: cs.primary),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              title,
+              style: GoogleFonts.outfit(
+                fontWeight: FontWeight.w600,
+                fontSize: 15,
               ),
-              child: Icon(icon, color: colorScheme.primary, size: 22),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                      if (showPremiumLock)
-                        const Padding(
-                          padding: EdgeInsets.only(left: 8.0),
-                          child: Icon(Icons.lock_rounded, size: 14, color: Colors.amber),
-                        ),
-                    ],
-                  ),
-                  Text(subtitle, style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
-                ],
-              ),
-            ),
-            DropdownButton<String>(
-              value: selectedItem,
-              icon: Icon(Icons.expand_more_rounded, color: colorScheme.primary),
-              underline: const SizedBox(),
-              onChanged: onChanged,
-              items: items.map<DropdownMenuItem<String>>((value) {
-                return DropdownMenuItem<String>(
-                  value: value,
-                  child: Text(value, style: const TextStyle(fontSize: 14)),
-                );
-              }).toList(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNavigationTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return _buildTileContainer(
-      child: ListTile(
-        onTap: onTap,
-        leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: colorScheme.secondaryContainer.withOpacity(0.4),
-            borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(icon, color: colorScheme.secondary, size: 22),
-        ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-        subtitle: Text(subtitle, style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
-        trailing: Icon(Icons.arrow_forward_ios_rounded, size: 14, color: colorScheme.onSurfaceVariant),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          DropdownButton<String>(
+            value: safeSelected,
+            underline: const SizedBox(),
+            borderRadius: BorderRadius.circular(14),
+            icon: Icon(Icons.expand_more_rounded, color: cs.primary, size: 18),
+            style: GoogleFonts.outfit(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: cs.onSurface,
+            ),
+            onChanged: onChanged,
+            items: items
+                .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                .toList(),
+          ),
+        ],
       ),
     );
   }
+}
 
-  Widget _buildColorThemeTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required String selectedColor,
-    required ValueChanged<String> onChanged,
-  }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return _buildTileContainer(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primaryContainer.withOpacity(0.4),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, color: colorScheme.primary, size: 22),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                      Text(subtitle, style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: AppTheme.themeColors.entries.map((entry) {
-                final colorName = entry.key;
-                final color = entry.value;
-                final isSelected = selectedColor == colorName;
+// ── Nav tile ──────────────────────────────────────────────────────────────────
+class _NavTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final Color? color;
 
+  const _NavTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      onTap: onTap,
+      leading: _IconBadge(icon: icon, color: color ?? cs.primary),
+      title: Text(
+        title,
+        style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 15),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: GoogleFonts.outfit(fontSize: 12, color: cs.onSurfaceVariant),
+      ),
+      trailing: Icon(
+        Icons.chevron_right_rounded,
+        color: cs.onSurfaceVariant,
+        size: 20,
+      ),
+    );
+  }
+}
+
+// ── Icon badge ────────────────────────────────────────────────────────────────
+class _IconBadge extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  const _IconBadge({required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(icon, color: color, size: 20),
+    );
+  }
+}
+
+// ── Color picker ──────────────────────────────────────────────────────────────
+class _ColorPicker extends StatelessWidget {
+  final ThemeController tc;
+  const _ColorPicker({required this.tc});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.07)
+              : Colors.black.withValues(alpha: 0.07),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _IconBadge(icon: Icons.palette_outlined, color: cs.primary),
+              const SizedBox(width: 14),
+              Text(
+                'Color Theme',
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Obx(
+            () => Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: AppTheme.themeColors.entries.map((e) {
+                final isSelected = tc.currentThemeColor.value == e.key;
                 return GestureDetector(
                   onTap: () {
-                    if (!_isPremium) {
-                      _showPremiumFeatureSnackbar('Color Themes');
-                      return;
-                    }
-                    onChanged(colorName);
+                    HapticFeedback.selectionClick();
+                    tc.changeThemeColor(e.key);
                   },
-                  child: Container(
-                    width: 48,
-                    height: 48,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 42,
+                    height: 42,
                     decoration: BoxDecoration(
-                      color: color,
-                      borderRadius: BorderRadius.circular(14),
+                      color: e.value,
+                      borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: isSelected ? Colors.white : Colors.transparent,
-                        width: 3,
+                        width: 2.5,
                       ),
-                      boxShadow: isSelected
-                          ? [BoxShadow(color: color.withOpacity(0.4), blurRadius: 10, spreadRadius: 2)]
-                          : [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))],
+                      boxShadow: [
+                        BoxShadow(
+                          color: e.value.withValues(
+                            alpha: isSelected ? 0.55 : 0.0,
+                          ),
+                          blurRadius: 12,
+                          spreadRadius: 1,
+                        ),
+                      ],
                     ),
-                    child: isSelected ? const Icon(Icons.check_rounded, color: Colors.white, size: 24) : null,
+                    child: isSelected
+                        ? const Icon(
+                            Icons.check_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          )
+                        : null,
                   ),
                 );
               }).toList(),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

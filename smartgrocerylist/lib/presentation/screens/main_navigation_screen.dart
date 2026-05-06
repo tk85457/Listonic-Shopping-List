@@ -1,19 +1,13 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:smartgrocerylist/controllers/navigation_controller.dart';
-import 'package:smartgrocerylist/core/services/share_service.dart';
-import 'package:smartgrocerylist/core/themes/app_theme.dart';
-import 'package:smartgrocerylist/presentation/screens/home_screen.dart';
-import 'package:smartgrocerylist/presentation/screens/settings_screen.dart';
-import 'package:smartgrocerylist/presentation/screens/profile_screen.dart';
-import 'package:smartgrocerylist/presentation/screens/premium_screen.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:smartgrocerylist/data/repositories/grocery_repository.dart';
-import 'package:smartgrocerylist/controllers/auth_controller.dart';
+import 'package:grocerylist/controllers/navigation_controller.dart';
+import 'package:grocerylist/core/services/share_service.dart';
+import 'package:grocerylist/presentation/screens/home_screen.dart';
+import 'package:grocerylist/presentation/screens/settings_screen.dart';
+import 'package:grocerylist/presentation/widgets/ad_banner.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -23,134 +17,73 @@ class MainNavigationScreen extends StatefulWidget {
 }
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
-  final NavigationController _navController = Get.put(NavigationController());
-  final GroceryRepository _repository = GroceryRepository();
-  final AuthController _authController = Get.find<AuthController>();
+  final NavigationController _nav = Get.put(NavigationController());
 
-  @override
-  void initState() {
-    super.initState();
-  }
+  final List<_TabItem> _tabs = const [
+    _TabItem(icon: Icons.shopping_basket_outlined, activeIcon: Icons.shopping_basket_rounded, label: 'Lists'),
+    _TabItem(icon: Icons.tune_outlined, activeIcon: Icons.tune_rounded, label: 'Settings'),
+  ];
 
-  void _onItemTapped(int index) {
-    _navController.setSelectedTab(index);
-  }
+  static const _titles = ['My Lists', 'Settings'];
 
-  void _handlePremiumTap() {
-    Get.to(() => const PremiumScreen());
-  }
-
-  void _handleMenuSelection(String value) {
+  Future<void> _handleMenu(String value) async {
     switch (value) {
       case 'refresh':
-        // Trigger real data refresh from repository
-        Get.find<NavigationController>().triggerDataRefresh();
-        Get.snackbar(
-          'Refresh',
-          'Data refreshed from storage',
-          backgroundColor: AppTheme.primaryGreen,
-          colorText: Colors.white,
-        );
+        _nav.triggerDataRefresh();
         break;
-      case 'sync_all':
-        final auth = Get.find<AuthController>();
-
-        // 1. Check Premium
-        if (!auth.isPremium.value) {
-          Get.snackbar('Premium Feature', 'First purchase premium then work this option',
-            backgroundColor: Colors.orange.shade100, snackPosition: SnackPosition.BOTTOM);
-          return;
-        }
-
-        // 2. Check Logged In
-        auth.isLoggedIn().then((isLoggedIn) async {
-          if (!isLoggedIn) {
-            Get.snackbar('Login Required', 'Please sign in to sync your data to the cloud.',
-              backgroundColor: Colors.blue.shade100, snackPosition: SnackPosition.BOTTOM);
-            return;
-          }
-
-          // 3. Check Internet
-          try {
-            final result = await InternetAddress.lookup('google.com').timeout(const Duration(seconds: 3));
-            if (result.isNotEmpty && result[0].rawAddress.isNotEmpty) {
-              Get.snackbar('Syncing', 'Syncing all lists to cloud...', showProgressIndicator: true);
-              _repository.syncAllData();
-            } else {
-              throw Exception();
-            }
-          } catch (_) {
-            Get.snackbar('Network Error', 'Please connect internet first.',
-              backgroundColor: Colors.red.shade100, snackPosition: SnackPosition.BOTTOM);
-          }
-        });
+      case 'trash':
+        Get.toNamed('/trash');
         break;
       case 'help':
         Get.toNamed('/faq');
         break;
       case 'contact':
-        _openContactSupport();
+        final uri = Uri(
+          scheme: 'mailto',
+          path: 'tk8545725@gmail.com',
+          queryParameters: {
+            'subject': 'Listonic - Shopping List Support',
+            'body': 'Describe your issue:\n\n',
+          },
+        );
+        if (await canLaunchUrl(uri)) launchUrl(uri);
         break;
       case 'share':
         ShareService.shareApp();
-        break;
-      case 'rate':
-        // TODO: Open Play Store
-        Get.snackbar(
-          'Rate App',
-          'Play Store link coming soon!',
-          backgroundColor: AppTheme.primaryGreen,
-          colorText: Colors.white,
-        );
         break;
       case 'privacy':
         Get.toNamed('/privacy-policy');
         break;
       case 'about':
-        _showAboutDialog();
+        _showAbout();
         break;
     }
   }
 
-  void _openContactSupport() async {
-    final Uri emailUri = Uri(
-      scheme: 'mailto',
-      path: 'support@smartgrocery.com',
-      queryParameters: {
-        'subject': 'Smart Grocery List Support Request',
-        'body': 'Please describe your issue or question:\n\n',
-      },
-    );
-
-    if (await canLaunchUrl(emailUri)) {
-      await launchUrl(emailUri);
-    } else {
-      Get.snackbar(
-        'Error',
-        'Could not open email app',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
-    }
-  }
-
-  void _showAboutDialog() {
+  void _showAbout() {
     Get.dialog(
       AlertDialog(
-        title: const Text('About Smart Grocery List'),
-        content: const Column(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text(
+          'Listonic - Shopping List',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+        ),
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Version: 1.0.0'),
-            SizedBox(height: 8),
-            Text('Your AI-powered shopping assistant'),
-            SizedBox(height: 8),
-            Text('© 2024 Smart Grocery Team'),
+            Text('Version 1.2.0', style: GoogleFonts.outfit()),
+            const SizedBox(height: 4),
+            Text(
+              'Your AI-powered shopping companion.',
+              style: GoogleFonts.outfit(color: Colors.grey),
+            ),
+            const SizedBox(height: 4),
+            Text('© 2024 Listonic - Shopping List Team', style: GoogleFonts.outfit(color: Colors.grey)),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Get.back(), child: const Text('Close')),
+          TextButton(onPressed: Get.back, child: const Text('Close')),
         ],
       ),
     );
@@ -158,209 +91,132 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Obx(() {
-      final selectedIndex = _navController.selectedTabIndex.value;
-      final colorScheme = Theme.of(context).colorScheme;
+      final idx = _nav.selectedTabIndex.value;
 
       return PopScope(
         canPop: false,
-        onPopInvokedWithResult: (didPop, result) async {
+        onPopInvokedWithResult: (didPop, _) async {
           if (didPop) return;
-          if (selectedIndex == 0) {
-            final shouldExit = await _showExitDialog(context);
-            if (shouldExit) {
-              SystemNavigator.pop();
-            }
+          if (idx == 0) {
+            final exit = await _showExitDialog();
+            if (exit) SystemNavigator.pop();
           } else {
-            _navController.setSelectedTab(0);
+            _nav.setSelectedTab(0);
           }
         },
         child: Scaffold(
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            scrolledUnderElevation: 0,
             title: Text(
-              _navController.currentTitle.value,
+              _titles[idx],
               style: GoogleFonts.outfit(
-                fontWeight: FontWeight.bold,
                 fontSize: 24,
+                fontWeight: FontWeight.w800,
                 letterSpacing: -0.5,
               ),
             ),
-            centerTitle: false,
             actions: [
-              // Premium Badge
-              GestureDetector(
-                onTap: _handlePremiumTap,
-                child: Container(
-                  margin: const EdgeInsets.only(right: 8),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors:
-                          _authController.isPremium.value
-                              ? [colorScheme.secondary, colorScheme.tertiary]
-                              : [colorScheme.primary, colorScheme.secondary],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(25),
-                    boxShadow: [
-                      BoxShadow(
-                        color: colorScheme.primary.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _authController.isPremium.value
-                            ? Icons.workspace_premium
-                            : Icons.bolt_rounded,
-                        color: Colors.white,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _authController.isPremium.value ? 'Premium' : 'Upgrade',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // Trash button
-              IconButton(
-                icon: const Icon(Icons.delete_outline_rounded),
-                onPressed: () => Get.toNamed('/trash'),
+              _AppBarBtn(
+                icon: Icons.delete_outline_rounded,
+                onTap: () => Get.toNamed('/trash'),
                 tooltip: 'Trash',
               ),
-              // More menu
               PopupMenuButton<String>(
-                onSelected: _handleMenuSelection,
+                onSelected: _handleMenu,
+                offset: const Offset(0, 44),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                itemBuilder:
-                    (context) => [
-                      _buildPopupItem('refresh', Icons.refresh, 'Refresh'),
-                      _buildPopupItem('sync_all', Icons.cloud_sync_rounded, 'Sync All Lists'),
-                      const PopupMenuDivider(),
-                      _buildPopupItem('help', Icons.help_outline, 'Help'),
-                      _buildPopupItem('contact', Icons.email_outlined, 'Support'),
-                      _buildPopupItem('share', Icons.share_rounded, 'Share App'),
-                      _buildPopupItem('privacy', Icons.security_rounded, 'Privacy'),
-                      _buildPopupItem('about', Icons.info_outline, 'About'),
-                    ],
-                icon: const Icon(Icons.more_vert_rounded),
-              ),
-            ],
-            elevation: 0,
-            scrolledUnderElevation: 0,
-            backgroundColor: Colors.transparent,
-          ),
-          body: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Theme.of(context).scaffoldBackgroundColor,
-                  colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                color: isDark ? const Color(0xFF1C2338) : Colors.white,
+                elevation: 8,
+                icon: Icon(Icons.more_vert_rounded, color: cs.onSurface.withValues(alpha: 0.6)),
+                itemBuilder: (_) => [
+                  _menuItem('refresh', Icons.refresh_rounded, 'Refresh', cs),
+                  _menuItem('trash', Icons.delete_outline_rounded, 'Trash', cs),
+                  const PopupMenuDivider(height: 1),
+                  _menuItem('help', Icons.help_outline_rounded, 'Help & FAQ', cs),
+                  _menuItem('contact', Icons.email_outlined, 'Contact Support', cs),
+                  _menuItem('share', Icons.share_rounded, 'Share App', cs),
+                  const PopupMenuDivider(height: 1),
+                  _menuItem('privacy', Icons.shield_outlined, 'Privacy Policy', cs),
+                  _menuItem('about', Icons.info_outline_rounded, 'About', cs),
                 ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
               ),
-            ),
-            child: IndexedStack(
-              index: selectedIndex,
-              children: const [
-                HomeScreen(),
-                SettingsScreen(),
-                ProfileScreen(),
-              ],
-            ),
+              const SizedBox(width: 4),
+            ],
           ),
-          bottomNavigationBar: Container(
-            decoration: BoxDecoration(
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 20,
-                  offset: const Offset(0, -5),
+          body: Column(
+            children: [
+              Expanded(
+                child: IndexedStack(
+                  index: idx,
+                  children: const [
+                    HomeScreen(),
+                    SettingsScreen(),
+                  ],
                 ),
-              ],
-            ),
-            child: NavigationBar(
-              selectedIndex: selectedIndex,
-              onDestinationSelected: _onItemTapped,
-              backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-              elevation: 0,
-              indicatorColor: colorScheme.primaryContainer,
-              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-              height: 70,
-              destinations: [
-                _buildNavItem(0, Icons.shopping_basket_outlined, Icons.shopping_basket, 'Lists'),
-                _buildNavItem(1, Icons.settings_outlined, Icons.settings, 'Settings'),
-                _buildNavItem(2, Icons.person_outline, Icons.person, 'Profile'),
-              ],
-            ),
+              ),
+              const AdBanner(),
+            ],
+          ),
+          bottomNavigationBar: _BottomNav(
+            items: _tabs,
+            selected: idx,
+            primary: cs.primary,
+            onTap: _nav.setSelectedTab,
           ),
         ),
       );
     });
   }
 
-  PopupMenuItem<String> _buildPopupItem(String value, IconData icon, String label) {
-    return PopupMenuItem<String>(
+  PopupMenuItem<String> _menuItem(
+    String value,
+    IconData icon,
+    String label,
+    ColorScheme cs,
+  ) {
+    return PopupMenuItem(
       value: value,
+      height: 44,
       child: Row(
         children: [
-          Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
+          Icon(icon, size: 18, color: cs.primary),
           const SizedBox(width: 12),
-          Text(label, style: const TextStyle(fontSize: 14)),
+          Text(label, style: GoogleFonts.outfit(fontSize: 14)),
         ],
       ),
     );
   }
 
-  NavigationDestination _buildNavItem(int index, IconData icon, IconData activeIcon, String label) {
-    return NavigationDestination(
-      icon: Icon(icon, color: Colors.grey.shade600),
-      selectedIcon: Icon(activeIcon, color: Theme.of(context).colorScheme.primary),
-      label: label,
-    );
-  }
-
-  Future<bool> _showExitDialog(BuildContext context) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Exit App', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-        content: const Text('Are you sure you want to exit the app?'),
+  Future<bool> _showExitDialog() async {
+    final result = await Get.dialog<bool>(
+      AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text('Exit?', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+        content: Text('Are you sure you want to quit?', style: GoogleFonts.outfit()),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text('Stay', style: TextStyle(color: Colors.grey.shade600)),
+            onPressed: () => Get.back(result: false),
+            child: Text('Stay', style: GoogleFonts.outfit(color: Colors.grey)),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Get.back(result: true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade400,
+              backgroundColor: Colors.redAccent,
               foregroundColor: Colors.white,
               elevation: 0,
+              minimumSize: const Size(0, 40),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            child: const Text('Exit'),
+            child: Text('Exit', style: GoogleFonts.outfit()),
           ),
         ],
       ),
@@ -368,3 +224,135 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     return result ?? false;
   }
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Supporting widgets
+// ──────────────────────────────────────────────────────────────────────────────
+
+class _TabItem {
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  const _TabItem({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+  });
+}
+
+class _AppBarBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final String tooltip;
+  const _AppBarBtn({
+    required this.icon,
+    required this.onTap,
+    required this.tooltip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, size: 20, color: cs.onSurface.withValues(alpha: 0.6)),
+        ),
+      ),
+    );
+  }
+}
+
+class _BottomNav extends StatelessWidget {
+  final List<_TabItem> items;
+  final int selected;
+  final Color primary;
+  final ValueChanged<int> onTap;
+
+  const _BottomNav({
+    required this.items,
+    required this.selected,
+    required this.primary,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xFF141929) : Colors.white;
+    final muted = isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.06),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 64,
+          child: Row(
+            children: List.generate(items.length, (i) {
+              final item = items[i];
+              final isActive = i == selected;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => onTap(i),
+                  behavior: HitTestBehavior.opaque,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOut,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isActive
+                                ? primary.withValues(alpha: 0.12)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            isActive ? item.activeIcon : item.icon,
+                            color: isActive ? primary : muted,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          item.label,
+                          style: GoogleFonts.outfit(
+                            fontSize: 11,
+                            fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                            color: isActive ? primary : muted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+      ),
+    );
+  }
+}
+

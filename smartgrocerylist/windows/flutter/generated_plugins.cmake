@@ -3,9 +3,10 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  app_links
   file_selector_windows
   flutter_tts
+  isar_flutter_libs
+  local_auth_windows
   permission_handler_windows
   share_plus
   speech_to_text_windows

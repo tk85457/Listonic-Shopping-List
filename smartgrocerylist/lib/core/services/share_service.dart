@@ -1,6 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:smartgrocerylist/data/models/models.dart';
+import 'package:grocerylist/data/models/models.dart';
 
 class ShareService {
   static Future<void> shareList(
@@ -30,11 +30,11 @@ class ShareService {
     }
 
     buffer.writeln('');
-    buffer.writeln('Shared from Smart Grocery List 📱');
+    buffer.writeln('Shared from Listonic - Shopping List 📱');
 
     await Share.share(
       buffer.toString(),
-      subject: '${list.name} - Grocery List',
+      subject: '${list.name} - Listonic - Shopping List',
     );
   }
 
@@ -48,7 +48,7 @@ class ShareService {
 📝 Notes: ${item.notes.isNotEmpty ? item.notes : 'None'}
 ${item.isChecked ? '✅ Completed' : '⏳ Pending'}
 
-Shared from Smart Grocery List 📱
+Shared from Listonic - Shopping List 📱
 ''';
 
     await Share.share(text, subject: '${item.name} - Grocery Item');
@@ -56,7 +56,7 @@ Shared from Smart Grocery List 📱
 
   static Future<void> shareApp() async {
     const text = '''
-🛒 Smart Grocery List
+🛒 Listonic - Shopping List
 
 Your AI-powered shopping assistant!
 
@@ -70,10 +70,10 @@ Your AI-powered shopping assistant!
 
 Download now: [Play Store Link]
 
-#SmartGrocery #ShoppingApp #AIAssistant
+#ListonicShoppingList #ShoppingApp #AIAssistant
 ''';
 
-    await Share.share(text, subject: 'Check out Smart Grocery List!');
+    await Share.share(text, subject: 'Check out Listonic - Shopping List!');
   }
 
   static Future<void> shareMultipleItems(
@@ -91,7 +91,7 @@ Download now: [Play Store Link]
     }
 
     buffer.writeln('');
-    buffer.writeln('Shared from Smart Grocery List 📱');
+    buffer.writeln('Shared from Listonic - Shopping List 📱');
 
     await Share.share(buffer.toString(), subject: 'Selected Grocery Items');
   }
@@ -100,3 +100,4 @@ Download now: [Play Store Link]
     await Clipboard.setData(ClipboardData(text: text));
   }
 }
+

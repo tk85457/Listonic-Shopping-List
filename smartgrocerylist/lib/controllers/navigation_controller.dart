@@ -1,5 +1,5 @@
 import 'package:get/get.dart';
-import 'package:smartgrocerylist/data/models/models.dart';
+import 'package:grocerylist/data/models/models.dart';
 
 class NavigationController extends GetxController {
   // Current selected tab index
@@ -70,3 +70,4 @@ class NavigationController extends GetxController {
     refreshData.value = !refreshData.value;
   }
 }
+

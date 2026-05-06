@@ -139,7 +139,7 @@ class ShoppingList {
       'last_modified': lastModified.toIso8601String(),
       'created_by': createdBy,
       'is_default': isDefault,
-      'shared_with': sharedWith, // Supabase expects an array
+      'shared_with': sharedWith,
       'deleted_at': deletedAt?.toIso8601String(),
       'total_items': totalItems,
       'checked_items': checkedItems,
@@ -305,7 +305,7 @@ class Recipe {
       'instructions': instructions.join('|||'),
       'instructions_text': instructionsText ?? instructions.join('\n'),
       'cuisine': cuisine,
-      'dietary_tags': dietaryTags, // Supabase expects an array
+      'dietary_tags': dietaryTags,
       'is_favorite': isFavorite,
     };
   }
@@ -391,9 +391,8 @@ class TrashItem {
   String name;
   String listName;
   DateTime deletedAt;
-  String type; // 'item' or 'list'
-  Map<String, dynamic>?
-  originalData; // Store full item/list data for restoration
+  String type;
+  Map<String, dynamic>? originalData;
 
   TrashItem({
     required this.id,

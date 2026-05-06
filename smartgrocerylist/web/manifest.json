@@ -1,11 +1,11 @@
 {
-    "name": "Smart Grocery List",
-    "short_name": "Smart Grocery List",
+    "name": "Listonic - Shopping List",
+    "short_name": "Listonic - Shopping List",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "Smart Grocery List - AI-Powered Intelligent Shopping Assistant",
+    "description": "Grocery List - AI-Powered Intelligent Shopping Assistant",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

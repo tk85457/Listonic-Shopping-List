@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smartgrocerylist/data/models/models.dart';
+import 'package:grocerylist/data/models/models.dart';
 
 void main() {
   group('GroceryItem Model', () {
@@ -215,3 +215,4 @@ void main() {
     });
   });
 }
+

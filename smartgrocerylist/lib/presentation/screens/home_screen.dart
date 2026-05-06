@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:flutter/foundation.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:smartgrocerylist/controllers/navigation_controller.dart';
-import 'package:smartgrocerylist/controllers/auth_controller.dart';
-import 'package:smartgrocerylist/core/themes/app_theme.dart';
-import 'package:smartgrocerylist/core/services/share_service.dart';
-import 'package:smartgrocerylist/data/models/models.dart';
-import 'package:smartgrocerylist/data/repositories/grocery_repository.dart';
-import 'package:uuid/uuid.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:uuid/uuid.dart';
+import 'package:grocerylist/controllers/navigation_controller.dart';
+import 'package:grocerylist/core/services/permission_service.dart';
+import 'package:grocerylist/core/services/share_service.dart';
+import 'package:grocerylist/data/models/models.dart';
+import 'package:grocerylist/core/services/snackbar_service.dart';
+import 'package:grocerylist/data/repositories/grocery_repository.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,231 +21,53 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final GroceryRepository _repository = GroceryRepository();
-
+  final _repo = GroceryRepository();
   List<ShoppingList> _lists = [];
-  Worker? _refreshWorker;
-  ShoppingList? _lastDeletedList; // Track for undo
+  bool _isLoading = true;
+  Worker? _worker;
+  ShoppingList? _lastDeleted;
 
   @override
   void initState() {
     super.initState();
-    _checkAndShowPermissions();
     _loadLists();
-
-    _refreshWorker = ever(
+    _worker = ever(
       Get.find<NavigationController>().refreshData,
       (_) => _loadLists(),
     );
-  }
-
-  Future<void> _loadLists() async {
-    try {
-      _lists = await _repository.getAllShoppingLists();
-      setState(() {});
-    } catch (e) {
-      Get.snackbar(
-        'Error',
-        'Failed to load shopping lists',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
+    if (!kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        PermissionService.checkAndShowPermissions(context);
+      });
     }
   }
 
   @override
   void dispose() {
-    _refreshWorker?.dispose();
+    _worker?.dispose();
     super.dispose();
   }
 
-  Future<void> _checkAndShowPermissions() async {
-    final prefs = await SharedPreferences.getInstance();
-    final hasRequestedPermissions =
-        prefs.getBool('permissions_requested') ?? false;
-
-    if (!kIsWeb && !hasRequestedPermissions) {
-      // Wait a bit for the screen to load, then show step-by-step permissions
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (mounted) {
-        await _showStepByStepPermissions();
-      }
-    }
-  }
-
-  Future<void> _showStepByStepPermissions() async {
-    final permissions = [
-      Permission.microphone,
-      if (!kIsWeb) Permission.photos,
-      Permission.notification,
-    ];
-
-    for (var permission in permissions) {
-      if (!(await permission.status.isGranted)) {
-        String title = '';
-        String desc = '';
-
-        if (permission == Permission.microphone) {
-          title = 'Microphone Permission';
-          desc = 'Allow microphone access for voice input features.';
-        } else if (permission == Permission.photos) {
-          title = 'Gallery Permission';
-          desc = 'Allow gallery access to select photos for items.';
-        } else if (permission == Permission.notification) {
-          title = 'Notification Permission';
-          desc = 'Allow notifications for reminders and smart alerts.';
-        }
-
-        await _showPermissionDialog(title, desc, permission);
-      }
-    }
-
-    // Save that we've requested permissions
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('permissions_requested', true);
-  }
-
-  Future<void> _showPermissionDialog(
-    String title,
-    String description,
-    Permission permission,
-  ) async {
-    return await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(description),
-            const SizedBox(height: 16),
-            const Text(
-              'You can change this later in app settings.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              final status = await permission.request();
-              if (!context.mounted) return;
-              Navigator.of(context).pop();
-
-              if (status.isGranted) {
-                Get.snackbar(
-                  'Permission Granted',
-                  '$title access granted successfully!',
-                  backgroundColor: AppTheme.primaryGreen,
-                  colorText: Colors.white,
-                  duration: const Duration(milliseconds: 500),
-                );
-              } else if (status.isPermanentlyDenied) {
-                Get.snackbar(
-                  'Permission Denied',
-                  'Please enable $title in app settings to use this feature.',
-                  backgroundColor: Colors.orange,
-                  colorText: Colors.white,
-                  duration: const Duration(seconds: 1),
-                );
-              }
-            },
-            child: const Text('Allow'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Skip'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGuestNudge() {
-    return FutureBuilder<bool>(
-      future: SharedPreferences.getInstance().then((p) => p.getBool('isGuest') ?? false),
-      builder: (context, snapshot) {
-        if (snapshot.data == true) {
-          return Positioned(
-            top: 16,
-            left: 16,
-            right: 16,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.orange.shade200),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.cloud_off_rounded, color: Colors.orange.shade700, size: 20),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Guest Mode (${_lists.length}/3 lists)',
-                          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.orange.shade900),
-                        ),
-                        Text(
-                          'Sign in to sync your lists to the cloud.',
-                          style: TextStyle(fontSize: 11, color: Colors.orange.shade800),
-                        ),
-                      ],
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => Get.offAllNamed('/signin'),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: Text('Sign In', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13)),
-                  ),
-                ],
-              ),
-            ),
-          ).animate().slideY(begin: -1, duration: const Duration(milliseconds: 600), curve: Curves.easeOutBack);
-        }
-        return const SizedBox.shrink();
-      },
-    );
+  Future<void> _loadLists() async {
+    setState(() => _isLoading = true);
+    try {
+      _lists = await _repo.getAllShoppingLists();
+    } catch (_) {}
+    if (mounted) setState(() => _isLoading = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) return;
-        // Navigation is handled by MainNavigationScreen
-      },
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: Stack(
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        child: Stack(
           children: [
-            _buildGuestNudge(),
-            _lists.isEmpty ? _buildEmptyState() : _buildListsGrid(),
+            _isLoading ? _shimmer() : (_lists.isEmpty ? _empty() : _listView()),
             Positioned(
               bottom: 24,
-              right: 24,
-              child: FloatingActionButton.extended(
-                onPressed: () => _showCreateListDialog(context),
-                label: Text(
-                  'New List',
-                  style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
-                ),
-                icon: const Icon(Icons.add_rounded),
-                backgroundColor: colorScheme.primary,
-                foregroundColor: colorScheme.onPrimary,
-                elevation: 4,
-              ).animate().scale(delay: const Duration(milliseconds: 400), duration: const Duration(milliseconds: 400), curve: Curves.easeOutBack),
+              right: 20,
+              child: _Fab(onTap: () => _createDialog(context)),
             ),
           ],
         ),
@@ -253,611 +75,709 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _empty() {
+    final cs = Theme.of(context).colorScheme;
     return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32.0),
+      child: Padding(
+        padding: const EdgeInsets.all(40),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(32),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.shopping_basket_outlined,
-                size: 80,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ).animate().scale(duration: const Duration(milliseconds: 600), curve: Curves.easeOutBack).shake(delay: const Duration(milliseconds: 600)),
-            const SizedBox(height: 32),
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    color: cs.primary.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.shopping_basket_outlined,
+                    size: 56,
+                    color: cs.primary,
+                  ),
+                )
+                .animate()
+                .scale(duration: 600.ms, curve: Curves.easeOutBack)
+                .shake(delay: 700.ms, hz: 2, rotation: 0.02),
+            const SizedBox(height: 28),
             Text(
               'No lists yet',
               style: GoogleFonts.outfit(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onSurface,
+                fontSize: 26,
+                fontWeight: FontWeight.w800,
+                color: cs.onSurface,
+                letterSpacing: -0.5,
               ),
-            ).animate().fadeIn(delay: const Duration(milliseconds: 200)).slideY(begin: 0.2),
-            const SizedBox(height: 12),
+            ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.2),
+            const SizedBox(height: 10),
             Text(
-              'Create your first shopping list and start organized shopping today!',
+              'Create your first shopping list\nand stay organised.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              style: GoogleFonts.outfit(
+                fontSize: 15,
+                color: cs.onSurfaceVariant,
+                height: 1.5,
               ),
-            ).animate().fadeIn(delay: const Duration(milliseconds: 400)).slideY(begin: 0.2),
-            const SizedBox(height: 40),
-            ElevatedButton.icon(
-              onPressed: () => _showCreateListDialog(context),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Create List'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.8), // Darker shade
-                foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                elevation: 3,
-              ),
-            ).animate().fadeIn(delay: const Duration(milliseconds: 600)).scale(),
+            ).animate().fadeIn(delay: 350.ms).slideY(begin: 0.2),
+            const SizedBox(height: 36),
+            GestureDetector(
+                  onTap: () => _createDialog(context),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 28,
+                      vertical: 14,
+                    ),
+                    decoration: BoxDecoration(
+                      color: cs.primary,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: cs.primary.withValues(alpha: 0.35),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.add_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Create List',
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+                .animate()
+                .fadeIn(delay: 500.ms)
+                .scale(begin: const Offset(0.9, 0.9)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildListsGrid() {
+  Widget _listView() {
     return RefreshIndicator(
       onRefresh: _loadLists,
       color: Theme.of(context).colorScheme.primary,
       child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 110),
         itemCount: _lists.length,
-        itemBuilder: (context, index) {
-          final list = _lists[index];
-          return _buildListCard(list, context, index);
-        },
-      ),
-    );
-  }
-
-  Widget _buildListCard(ShoppingList list, BuildContext context, int index) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Material(
-        color: Theme.of(context).cardColor,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
+        itemBuilder: (_, i) => _ListCard(
+          list: _lists[i],
+          index: i,
           onTap: () {
-            final navController = Get.find<NavigationController>();
-            navController.setCurrentList(list);
-            Get.toNamed('/list/${list.id}', arguments: list);
+            HapticFeedback.lightImpact();
+            Get.find<NavigationController>().setCurrentList(_lists[i]);
+            Get.toNamed('/list/${_lists[i].id}', arguments: _lists[i]);
           },
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        colorScheme.primaryContainer,
-                        colorScheme.primaryContainer.withValues(alpha: 0.5),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Icon(
-                    Icons.shopping_bag_rounded,
-                    color: colorScheme.primary,
-                    size: 26,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        list.name,
-                        style: GoogleFonts.outfit(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(Icons.inventory_2_outlined, size: 14, color: colorScheme.onSurfaceVariant),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${list.totalItems} items',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Icon(Icons.access_time, size: 14, color: colorScheme.onSurfaceVariant),
-                          const SizedBox(width: 4),
-                          Text(
-                            _formatTimeAgo(list.lastModified),
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                if (list.sharedWith.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: colorScheme.secondaryContainer,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.group_rounded, size: 16, color: colorScheme.secondary),
-                  ),
-                const SizedBox(width: 8),
-                PopupMenuButton<String>(
-                  icon: Icon(Icons.more_vert_rounded, color: colorScheme.onSurfaceVariant),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                  onSelected: (value) async {
-                    if (value == 'rename') {
-                      _renameList(list);
-                    } else if (value == 'share') {
-                      final items = await _repository.getGroceryItems(list.id);
-                      await ShareService.shareList(list, items);
-                    } else if (value == 'invite') {
-                      _showInviteDialog(list);
-                    } else if (value == 'sync') {
-                      final auth = Get.find<AuthController>();
-                      if (auth.isPremium.value) {
-                        Get.snackbar('Syncing', 'Syncing "${list.name}" to cloud...', showProgressIndicator: true);
-                        await _repository.updateShoppingList(list); // Triggers sync inside repo
-                        final items = await _repository.getGroceryItems(list.id);
-                        for (var item in items) await _repository.updateGroceryItem(item);
-                        Get.back(); // Close snackbar if it's still there
-                        Get.snackbar('Success', 'List synced successfully!', backgroundColor: Colors.green.shade100);
-                      } else {
-                        Get.snackbar(
-                          'Premium Feature',
-                          'First purchase premium then work this option',
-                          backgroundColor: Colors.orange.shade100,
-                          snackPosition: SnackPosition.BOTTOM,
-                        );
-                      }
-                    } else if (value == 'delete') {
-                      _deleteList(list.id);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    _buildPopupItem('rename', Icons.edit_rounded, 'Rename'),
-                    _buildPopupItem('share', Icons.share_rounded, 'Share Text'),
-                    _buildPopupItem('invite', Icons.person_add_rounded, 'Invite Collaborator'),
-                    _buildPopupItem('sync', Icons.cloud_upload_outlined, 'Sync to Cloud'),
-                    const PopupMenuDivider(),
-                    _buildPopupItem('delete', Icons.delete_outline_rounded, 'Delete', isDestructive: true),
-                  ],
-                ),
+          onRename: () => _renameDialog(_lists[i]),
+          onShare: () async {
+            final items = await _repo.getGroceryItems(_lists[i].id);
+            ShareService.shareList(_lists[i], items);
+          },
+          onDelete: () => _deleteList(_lists[i].id),
+        ),
+      ),
+    );
+  }
 
-              ],
-            ),
+  Widget _shimmer() {
+    final cs = Theme.of(context).colorScheme;
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 110),
+      itemCount: 6,
+      itemBuilder: (_, _) => Shimmer.fromColors(
+        baseColor: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+        highlightColor: cs.surface,
+        child: Container(
+          height: 86,
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
           ),
         ),
       ),
-    ).animate().fadeIn(delay: Duration(milliseconds: index * 100), duration: const Duration(milliseconds: 500)).slideX(begin: 0.1);
-  }
-
-  PopupMenuItem<String> _buildPopupItem(String value, IconData icon, String label, {bool isDestructive = false}) {
-    return PopupMenuItem<String>(
-      value: value,
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: isDestructive ? Colors.red : Theme.of(context).colorScheme.primary),
-          const SizedBox(width: 12),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 14,
-              color: isDestructive ? Colors.red : null,
-              fontWeight: isDestructive ? FontWeight.w600 : null,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
-  String _formatTimeAgo(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
+  // ── Dialogs ──────────────────────────────────────────────────────────────────
 
-    if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}d ago';
-    } else {
-      return '${difference.inDays ~/ 7}w ago';
-    }
-  }
-
-  void _showCreateListDialog(BuildContext context) {
-    final TextEditingController nameController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text('Create New List', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-        content: TextField(
-          controller: nameController,
-          decoration: InputDecoration(
-            labelText: 'List name',
-            hintText: 'e.g., Weekly Groceries',
-            filled: true,
-            fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide.none,
-            ),
-            prefixIcon: const Icon(Icons.drive_file_rename_outline),
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel', style: TextStyle(color: Colors.grey.shade600)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (nameController.text.isNotEmpty) {
-                _createList(nameController.text);
-                Navigator.pop(context);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              foregroundColor: Theme.of(context).colorScheme.onPrimary,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              elevation: 0,
-            ),
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _createList(String name) async {
-    try {
-      // Check authentication status
-      final authController = Get.find<AuthController>();
-      final isAuthenticated = await authController.isLoggedIn();
-
-      // Check if user is guest
-      // Check if user is guest or free
-      final prefs = await SharedPreferences.getInstance();
-      final isGuest = prefs.getBool('isGuest') ?? false;
-      final isPremium = authController.isPremium.value;
-
-      // Free user / Guest user limit: 3 lists maximum
-      if (!isPremium && _lists.length >= 3) {
-        Get.toNamed('/premium');
-        Get.snackbar(
-          'Limit Reached',
-          'Free users can create up to 3 lists. Go Premium for unlimited lists!',
-          backgroundColor: Colors.orange.shade100,
-          colorText: Colors.black87,
-          duration: const Duration(seconds: 4),
-          snackPosition: SnackPosition.BOTTOM,
-        );
-        return;
-      }
-
-      // For authenticated users or guest users under limit
-      final newList = ShoppingList(
-        id: const Uuid().v4(),
-        name: name,
-        createdDate: DateTime.now(),
-        lastModified: DateTime.now(),
-      );
-
-      await _repository.addShoppingList(newList);
-      await _loadLists();
-
-      // Show success message with different text for guest users
-      String successMessage = 'List "$name" created';
-      if (isGuest) {
-        successMessage += ' (${_lists.length}/3 lists)';
-      }
-
-      Get.snackbar(
-        'Success',
-        successMessage,
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
-      );
-    } catch (e) {
-      String errorMessage = 'Failed to create list';
-      Get.snackbar(
-        'Error',
-        '$errorMessage: ${e.toString()}',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
-      );
-    }
-  }
-
-  void _renameList(ShoppingList list) async {
-    final TextEditingController renameController = TextEditingController(
-      text: list.name,
-    );
-
-    await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text('Rename List', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-        content: TextField(
-          controller: renameController,
-          decoration: InputDecoration(
-            hintText: 'Enter new list name',
-            filled: true,
-            fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide.none,
-            ),
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, null),
-            child: Text('Cancel', style: TextStyle(color: Colors.grey.shade600)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final newName = renameController.text.trim();
-              if (newName.isEmpty) {
-                Get.snackbar('Error', 'List name cannot be empty', backgroundColor: Colors.red, colorText: Colors.white);
-                return;
-              }
-
-              final allLists = await _repository.getAllShoppingLists();
-              final isDuplicate = allLists.any((l) => l.name.toLowerCase() == newName.toLowerCase() && l.id != list.id);
-              if (isDuplicate) {
-                Get.snackbar('Error', 'A list with this name already exists', backgroundColor: Colors.red, colorText: Colors.white);
-                return;
-              }
-
-              final updatedList = list.copyWith(name: newName, lastModified: DateTime.now());
-              await _repository.updateShoppingList(updatedList);
-              await _loadLists();
-
-              if (context.mounted) Navigator.pop(context, newName);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              foregroundColor: Theme.of(context).colorScheme.onPrimary,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              elevation: 0,
-            ),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _deleteList(String id) async {
-    final listToDelete = _lists.firstWhere((list) => list.id == id);
-    // Item deletion is handled by the repository
-
-    // Store for undo
-    _lastDeletedList = listToDelete;
-
-    await _repository.softDeleteShoppingList(listToDelete.id);
-    await _loadLists();
-
-    Get.find<NavigationController>().triggerTrashRefresh();
-
-    Get.snackbar(
-      'List Deleted',
-      '${listToDelete.name} moved to trash',
-      backgroundColor: Colors.orange,
-      colorText: Colors.white,
-      duration: const Duration(seconds: 4), // Give time to undo
-      mainButton: TextButton(
-        onPressed: () async {
-          await _restoreDeletedList();
-        },
-        child: const Text('Undo', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      ),
-    );
-
-    // Clear the reference after snackbar duration
-    Future.delayed(const Duration(seconds: 5), () {
-      _lastDeletedList = null;
-    });
-  }
-
-  Future<void> _restoreDeletedList() async {
-    if (_lastDeletedList == null) return;
-
-    try {
-      await _repository.restoreShoppingList(_lastDeletedList!.id);
-      await _loadLists();
-      Get.find<NavigationController>().triggerTrashRefresh();
-
-      Get.snackbar(
-        'List Restored',
-        '${_lastDeletedList!.name} has been restored',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-        duration: const Duration(seconds: 2),
-      );
-
-      _lastDeletedList = null; // Clear after restore
-    } catch (e) {
-      Get.snackbar(
-        'Error',
-        'Failed to restore list: $e',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
-    }
-  }
-
-  void _showInviteDialog(ShoppingList list) {
-    final TextEditingController emailController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text('Invite Collaborator', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Enter the email of the person you want to collaborate with on this list.'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: emailController,
-              decoration: InputDecoration(
-                labelText: 'Email Address',
-                hintText: 'user@example.com',
-                prefixIcon: const Icon(Icons.email_outlined),
-                filled: true,
-                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-              ),
-              keyboardType: TextInputType.emailAddress,
-              autofocus: true,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: TextStyle(color: Colors.grey.shade600))),
-          ElevatedButton(
-            onPressed: () async {
-              final email = emailController.text.trim();
-              if (email.isNotEmpty && GetUtils.isEmail(email)) {
-                try {
-                  await _repository.inviteCollaborator(list.id, email);
-                  Navigator.pop(context);
-                  Get.snackbar('Success', 'Invitation sent to $email', backgroundColor: Colors.green, colorText: Colors.white);
-                } catch (e) {
-                  Get.snackbar('Error', 'Failed to send invitation: $e', backgroundColor: Colors.red, colorText: Colors.white);
-                }
-              } else {
-                Get.snackbar('Error', 'Please enter a valid email address', backgroundColor: Colors.orange, colorText: Colors.white);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              foregroundColor: Theme.of(context).colorScheme.onPrimary,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: const Text('Invite'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-
-class ListSearchDelegate extends SearchDelegate {
-  final List<ShoppingList> lists;
-
-  ListSearchDelegate(this.lists);
-
-  @override
-  List<Widget> buildActions(BuildContext context) {
-    return [
-      IconButton(
-        icon: const Icon(Icons.clear),
-        onPressed: () {
-          query = '';
-        },
-      ),
-    ];
-  }
-
-  @override
-  Widget buildLeading(BuildContext context) {
-    return IconButton(
-      icon: const Icon(Icons.arrow_back),
-      onPressed: () {
-        close(context, null);
+  void _createDialog(BuildContext context) {
+    final ctrl = TextEditingController();
+    _showNameSheet(
+      title: 'New List',
+      hint: 'e.g., Weekly Groceries',
+      icon: Icons.shopping_basket_rounded,
+      confirmLabel: 'Create List',
+      controller: ctrl,
+      onConfirm: () async {
+        if (ctrl.text.trim().isNotEmpty) await _createList(ctrl.text.trim());
       },
     );
   }
 
-  @override
-  Widget buildResults(BuildContext context) {
-    final navController = Get.find<NavigationController>();
-    final results = lists
-        .where((list) => list.name.toLowerCase().contains(query.toLowerCase()))
-        .toList();
-
-    return ListView.builder(
-      itemCount: results.length,
-      itemBuilder: (context, index) => ListTile(
-        leading: const Icon(Icons.shopping_cart),
-        title: Text(results[index].name),
-        subtitle: Text('${results[index].totalItems} items'),
-        onTap: () {
-          close(context, results[index]);
-          navController.setCurrentList(results[index]);
-          Get.toNamed('/list/${results[index].id}');
-        },
-      ),
+  void _renameDialog(ShoppingList list) {
+    final ctrl = TextEditingController(text: list.name);
+    _showNameSheet(
+      title: 'Rename List',
+      hint: 'New name',
+      icon: Icons.edit_rounded,
+      confirmLabel: 'Save',
+      controller: ctrl,
+      onConfirm: () async {
+        final name = ctrl.text.trim();
+        if (name.isEmpty) return;
+        final all = await _repo.getAllShoppingLists();
+        if (all.any(
+          (l) => l.name.toLowerCase() == name.toLowerCase() && l.id != list.id,
+        )) {
+          SnackbarService.showWarning(
+            'Oops',
+            'A list with that name already exists',
+          );
+          return;
+        }
+        await _repo.updateShoppingList(
+          list.copyWith(name: name, lastModified: DateTime.now()),
+        );
+        _loadLists();
+      },
     );
   }
 
-  @override
-  Widget buildSuggestions(BuildContext context) {
-    final navController = Get.find<NavigationController>();
-    final suggestions = lists
-        .where((list) => list.name.toLowerCase().contains(query.toLowerCase()))
-        .toList();
+  void _showNameSheet({
+    required String title,
+    required String hint,
+    required IconData icon,
+    required String confirmLabel,
+    required TextEditingController controller,
+    required VoidCallback onConfirm,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return ListView.builder(
-      itemCount: suggestions.length,
-      itemBuilder: (context, index) => ListTile(
-        leading: const Icon(Icons.shopping_cart),
-        title: Text(suggestions[index].name),
-        subtitle: Text('${suggestions[index].totalItems} items'),
-        onTap: () {
-          close(context, suggestions[index]);
-          navController.setCurrentList(suggestions[index]);
-          Get.toNamed('/list/${suggestions[index].id}');
-        },
+    showModalBottomSheet(
+      context: context,
+      // KEY FIX: isScrollControlled=true allows sheet to resize with keyboard
+      isScrollControlled: true,
+      // KEY FIX: useSafeArea=true prevents system UI overlap
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        // KEY FIX: use AnimatedPadding inside the sheet so it reacts to keyboard
+        return AnimatedPadding(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          // KEY FIX: viewInsets from sheetCtx — gets actual keyboard height
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom,
+          ),
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.0, end: 1.0),
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeOutCubic,
+            builder: (ctx, val, child) => Transform.translate(
+              offset: Offset(0, 30 * (1 - val)),
+              child: Opacity(opacity: val, child: child),
+            ),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1C2338) : Colors.white,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(32),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.18),
+                    blurRadius: 40,
+                    offset: const Offset(0, -8),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Handle bar
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: cs.onSurface.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Icon + Title row
+                  Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: cs.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(icon, color: cs.primary, size: 22),
+                      ),
+                      const SizedBox(width: 14),
+                      Text(
+                        title,
+                        style: GoogleFonts.outfit(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: cs.onSurface,
+                          letterSpacing: -0.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Text field
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    textCapitalization: TextCapitalization.words,
+                    style: GoogleFonts.outfit(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: hint,
+                      prefixIcon: Icon(
+                        Icons.drive_file_rename_outline_rounded,
+                        size: 20,
+                        color: cs.primary,
+                      ),
+                      filled: true,
+                      fillColor: isDark
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : cs.primary.withValues(alpha: 0.05),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(color: cs.primary, width: 2),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 16,
+                      ),
+                    ),
+                    onSubmitted: (_) {
+                      if (controller.text.trim().isEmpty) return;
+                      HapticFeedback.mediumImpact();
+                      onConfirm();
+                      Navigator.of(sheetCtx).pop();
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Buttons row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.of(sheetCtx).pop(),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              side: BorderSide(
+                                color: cs.onSurface.withValues(alpha: 0.12),
+                              ),
+                            ),
+                          ),
+                          child: Text(
+                            'Cancel',
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.w600,
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            if (controller.text.trim().isEmpty) return;
+                            HapticFeedback.mediumImpact();
+                            onConfirm();
+                            Navigator.of(sheetCtx).pop();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: cs.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.check_rounded, size: 18),
+                              const SizedBox(width: 6),
+                              Text(
+                                confirmLabel,
+                                style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _createList(String name) async {
+    final list = ShoppingList(
+      id: const Uuid().v4(),
+      name: name,
+      createdDate: DateTime.now(),
+      lastModified: DateTime.now(),
+    );
+    await _repo.addShoppingList(list);
+    await _loadLists();
+    SnackbarService.showSimple('"$name" created');
+  }
+
+  void _deleteList(String id) async {
+    _lastDeleted = _lists.firstWhere((l) => l.id == id);
+    await _repo.softDeleteShoppingList(id);
+    await _loadLists();
+    Get.find<NavigationController>().triggerTrashRefresh();
+    Get.snackbar(
+      'Deleted',
+      '"${_lastDeleted!.name}" moved to trash',
+      backgroundColor: const Color(0xFFFF9800),
+      colorText: Colors.white,
+      snackPosition: SnackPosition.BOTTOM,
+      margin: const EdgeInsets.all(16),
+      borderRadius: 16,
+      icon: const Icon(Icons.delete_outline_rounded, color: Colors.white),
+      duration: const Duration(milliseconds: 800),
+      mainButton: TextButton(
+        onPressed: _undoDelete,
+        child: const Text(
+          'UNDO',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
       ),
+    );
+    Future.delayed(
+      const Duration(milliseconds: 900),
+      () => _lastDeleted = null,
+    );
+  }
+
+  Future<void> _undoDelete() async {
+    if (_lastDeleted == null) return;
+    await _repo.restoreShoppingList(_lastDeleted!.id);
+    await _loadLists();
+    Get.find<NavigationController>().triggerTrashRefresh();
+    SnackbarService.showSuccess('Restored', '"${_lastDeleted!.name}" is back');
+    _lastDeleted = null;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// List Card
+// ──────────────────────────────────────────────────────────────────────────────
+class _ListCard extends StatelessWidget {
+  final ShoppingList list;
+  final int index;
+  final VoidCallback onTap;
+  final VoidCallback onRename;
+  final VoidCallback onShare;
+  final VoidCallback onDelete;
+
+  const _ListCard({
+    required this.list,
+    required this.index,
+    required this.onTap,
+    required this.onRename,
+    required this.onShare,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final completed = list.totalItems > 0
+        ? (list.checkedItems / list.totalItems).clamp(0.0, 1.0)
+        : 0.0;
+
+    return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.07)
+                  : Colors.black.withValues(alpha: 0.07),
+            ),
+            boxShadow: isDark
+                ? []
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(20),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+                child: Row(
+                  children: [
+                    // Icon badge
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: cs.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(
+                        Icons.shopping_bag_rounded,
+                        color: cs.primary,
+                        size: 26,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            list.name,
+                            style: GoogleFonts.outfit(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: cs.onSurface,
+                              letterSpacing: -0.2,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              _Tag(
+                                label: '${list.totalItems} items',
+                                icon: Icons.inventory_2_outlined,
+                                color: cs.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 10),
+                              _Tag(
+                                label: _timeAgo(list.lastModified),
+                                icon: Icons.access_time_rounded,
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
+                          if (list.totalItems > 0) ...[
+                            const SizedBox(height: 8),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: completed,
+                                minHeight: 3,
+                                backgroundColor: cs.primary.withValues(
+                                  alpha: 0.12,
+                                ),
+                                color: cs.primary,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    PopupMenuButton<String>(
+                      padding: EdgeInsets.zero,
+                      icon: Icon(
+                        Icons.more_vert_rounded,
+                        color: cs.onSurfaceVariant,
+                        size: 20,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      onSelected: (v) {
+                        if (v == 'rename') onRename();
+                        if (v == 'share') onShare();
+                        if (v == 'delete') onDelete();
+                      },
+                      itemBuilder: (_) => [
+                        _popup('rename', Icons.edit_rounded, 'Rename', cs),
+                        _popup('share', Icons.share_rounded, 'Share', cs),
+                        const PopupMenuDivider(height: 1),
+                        _popup(
+                          'delete',
+                          Icons.delete_outline_rounded,
+                          'Delete',
+                          cs,
+                          color: Colors.redAccent,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        )
+        .animate()
+        .fadeIn(
+          delay: Duration(milliseconds: index * 40),
+          duration: 500.ms,
+        )
+        .slideX(begin: 0.15, curve: Curves.easeOutQuart);
+  }
+
+  PopupMenuItem<String> _popup(
+    String value,
+    IconData icon,
+    String label,
+    ColorScheme cs, {
+    Color? color,
+  }) => PopupMenuItem(
+    value: value,
+    height: 42,
+    child: Row(
+      children: [
+        Icon(icon, size: 18, color: color ?? cs.primary),
+        const SizedBox(width: 10),
+        Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: color,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  String _timeAgo(DateTime d) {
+    final diff = DateTime.now().difference(d);
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${diff.inDays ~/ 7}w ago';
+  }
+}
+
+class _Tag extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  const _Tag({required this.label, required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: color),
+        const SizedBox(width: 3),
+        Text(label, style: GoogleFonts.outfit(fontSize: 12, color: color)),
+      ],
+    );
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// FAB
+// ──────────────────────────────────────────────────────────────────────────────
+class _Fab extends StatelessWidget {
+  final VoidCallback onTap;
+  const _Fab({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        onTap();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        decoration: BoxDecoration(
+          color: cs.primary,
+          borderRadius: BorderRadius.circular(50),
+          boxShadow: [
+            BoxShadow(
+              color: cs.primary.withValues(alpha: 0.45),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.add_rounded, color: Colors.white, size: 22),
+            const SizedBox(width: 8),
+            Text(
+              'New List',
+              style: GoogleFonts.outfit(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ).animate().scale(
+      delay: 300.ms,
+      duration: 400.ms,
+      curve: Curves.easeOutBack,
     );
   }
 }

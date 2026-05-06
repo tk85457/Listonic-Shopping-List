@@ -1,6 +1,6 @@
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
-import 'package:speech_to_text/speech_to_text.dart'; // Keep this import, it's used for SpeechToText and SpeechListenOptions
+import 'package:speech_to_text/speech_to_text.dart';
 
 class VoiceService {
   static final VoiceService _instance = VoiceService._internal();
@@ -20,14 +20,12 @@ class VoiceService {
   Function(bool)? onListeningChanged;
 
   Future<bool> initialize() async {
-    // Configure TTS
     await _flutterTts.setLanguage('en-US');
     await _flutterTts.setSpeechRate(0.5);
     await _flutterTts.setVolume(1.0);
     await _flutterTts.setPitch(1.0);
 
-    // Initialize SpeechToText
-    bool available = await _speechToText.initialize(
+    final available = await _speechToText.initialize(
       onStatus: (status) {
         _isListening = _speechToText.isListening;
         onListeningChanged?.call(_isListening);
@@ -57,18 +55,15 @@ class VoiceService {
         _lastWords = result.recognizedWords;
         onResult?.call(_lastWords);
       },
-      listenFor: const Duration(
-        seconds: 30,
-      ), // Listen for a maximum of 30 seconds
-      pauseFor: const Duration(seconds: 5), // Pause for 5 seconds of silence
-      partialResults: true,
+      listenFor: const Duration(seconds: 30),
+      pauseFor: const Duration(seconds: 5),
       localeId: 'en_US',
+      listenOptions: SpeechListenOptions(partialResults: true),
     );
   }
 
   Future<void> stopListening() async {
     if (!_isListening) return;
-
     await _speechToText.stop();
     _isListening = false;
     onListeningChanged?.call(false);
@@ -88,12 +83,8 @@ class VoiceService {
     _speechToText.cancel();
   }
 
-  // Parse voice commands for grocery items
   List<String> parseGroceryItems(String voiceText) {
-    // Simple parsing logic - can be enhanced with AI
     final text = voiceText.toLowerCase();
-
-    // Remove common phrases
     String cleanText = text
         .replaceAll('add', '')
         .replaceAll('i need', '')
@@ -104,8 +95,7 @@ class VoiceService {
         .replaceAll('can you', '')
         .trim();
 
-    // Split by common separators
-    List<String> items = [];
+    List<String> items;
     if (cleanText.contains(' and ')) {
       items = cleanText.split(' and ');
     } else if (cleanText.contains(',')) {
@@ -118,10 +108,10 @@ class VoiceService {
       items = [cleanText];
     }
 
-    // Clean up items
     return items
         .map((item) => item.trim())
         .where((item) => item.isNotEmpty && item.length > 1)
         .toList();
   }
 }
+

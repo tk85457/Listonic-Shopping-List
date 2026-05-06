@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.smartgrocery" "\0"
-            VALUE "FileDescription", "smartgrocerylist" "\0"
+            VALUE "CompanyName", "com.Grocery List" "\0"
+            VALUE "FileDescription", "Grocery Listlist" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "smartgrocerylist" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.smartgrocery. All rights reserved." "\0"
-            VALUE "OriginalFilename", "smartgrocerylist.exe" "\0"
-            VALUE "ProductName", "smartgrocerylist" "\0"
+            VALUE "InternalName", "Grocery Listlist" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 com.Grocery List. All rights reserved." "\0"
+            VALUE "OriginalFilename", "Grocery Listlist.exe" "\0"
+            VALUE "ProductName", "Grocery Listlist" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
@@ -119,3 +119,4 @@ END
 
 /////////////////////////////////////////////////////////////////////////////
 #endif    // not APSTUDIO_INVOKED
+

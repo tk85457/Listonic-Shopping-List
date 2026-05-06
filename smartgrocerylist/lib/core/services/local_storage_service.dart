@@ -1,7 +1,7 @@
 
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:smartgrocerylist/data/models/models.dart';
+import 'package:grocerylist/data/models/models.dart';
 
 class LocalStorageService {
   static const String _listsKey = 'guest_shopping_lists';
@@ -173,7 +173,11 @@ class LocalStorageService {
     final prefs = await SharedPreferences.getInstance();
     final List<PantryItem> all = await getPantryItems();
     final index = all.indexWhere((i) => i.id == item.id);
-    if (index >= 0) all[index] = item; else all.add(item);
+    if (index >= 0) {
+      all[index] = item;
+    } else {
+      all.add(item);
+    }
     await prefs.setString(_pantryKey, jsonEncode(all.map((i) => i.toMap()).toList()));
   }
 
@@ -216,3 +220,4 @@ class LocalStorageService {
     await prefs.setString(_historyKey, jsonEncode(all.map((i) => i.toMap()).toList()));
   }
 }
+

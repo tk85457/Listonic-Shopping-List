@@ -1,18 +1,16 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:smartgrocerylist/core/themes/app_theme.dart';
-import 'package:smartgrocerylist/data/repositories/grocery_repository.dart';
+import 'package:grocerylist/data/repositories/grocery_repository.dart';
 import 'package:uuid/uuid.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:smartgrocerylist/data/models/models.dart';
-import 'package:smartgrocerylist/core/network/ai_service.dart';
-import 'package:smartgrocerylist/core/services/voice_service.dart';
-import 'package:smartgrocerylist/core/services/supabase_service.dart';
+import 'package:grocerylist/data/models/models.dart';
+import 'package:grocerylist/core/services/voice_service.dart';
+import 'package:grocerylist/controllers/navigation_controller.dart';
+import 'package:grocerylist/core/network/ai_service.dart';
+import 'package:grocerylist/core/constants/app_categories.dart';
+import 'package:grocerylist/core/services/snackbar_service.dart';
 
 class AddItemScreen extends StatefulWidget {
   final String listId;
@@ -25,12 +23,11 @@ class AddItemScreen extends StatefulWidget {
 }
 
 class _AddItemScreenState extends State<AddItemScreen> {
+  final GroceryRepository _repository = GroceryRepository();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
   late final TextEditingController _quantityController;
   String? _imageUrl;
-  bool _isUploadingImage = false;
-
   final VoiceService _voiceService = VoiceService();
   bool _isListening = false;
 
@@ -38,24 +35,25 @@ class _AddItemScreenState extends State<AddItemScreen> {
   int _quantity = 1;
   String? _selectedUnit;
   String? _selectedStoreAisle;
+  List<String> _mlSuggestions = [];
+  bool _isLoadingSuggestions = false;
 
-  final ImagePicker _imagePicker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
     if (widget.item != null) {
       _nameController.text = widget.item!.name;
-      _notesController.text = widget.item!.notes ?? '';
+      _notesController.text = widget.item!.notes;
       _quantity = widget.item!.quantity.toInt();
       _selectedCategory = widget.item!.category;
       _selectedUnit = widget.item!.unit;
       _selectedStoreAisle = widget.item!.storeAisle;
       _imageUrl = widget.item!.imageUrl;
     } else {
-      _selectedCategory = 'Produce';
+      _selectedCategory = AppCategories.produce;
       _selectedUnit = 'item';
-      _selectedStoreAisle = 'Produce';
+      _selectedStoreAisle = AppCategories.produce;
     }
     _quantityController = TextEditingController(text: _quantity.toString());
     AIService.initializeMLModel();
@@ -75,8 +73,6 @@ class _AddItemScreenState extends State<AddItemScreen> {
     'Beverages', 'Snacks', 'Personal Care', 'Household',
   ];
 
-  List<String> _mlSuggestions = [];
-  bool _isLoadingSuggestions = false;
 
   @override
   void dispose() {
@@ -89,31 +85,28 @@ class _AddItemScreenState extends State<AddItemScreen> {
 
   Future<void> _loadMLSuggestions(String input) async {
     if (input.isEmpty) {
-      setState(() => _mlSuggestions = []);
+      if (mounted) setState(() => _mlSuggestions = []);
       return;
     }
-    setState(() => _isLoadingSuggestions = true);
+
+    if (mounted) setState(() => _isLoadingSuggestions = true);
+
     try {
-      final history = await _getGroceryItems();
-      final suggestions = await AIService.getEnhancedItemSuggestions(input, history, widget.listId);
+      final suggestions = await AIService.getSuggestions(input);
+      final category = await AIService.categorizeItem(input);
+
       if (mounted) {
         setState(() {
           _mlSuggestions = suggestions;
           _isLoadingSuggestions = false;
+          if (category != null && category != AppCategories.other) {
+            _selectedCategory = category;
+            _selectedStoreAisle = _getAisleForCategory(category);
+          }
         });
       }
     } catch (e) {
       if (mounted) setState(() => _isLoadingSuggestions = false);
-    }
-  }
-
-  Future<List<String>> _getGroceryItems() async {
-    try {
-      final repository = Get.find<GroceryRepository>();
-      final items = await repository.getGroceryItems(widget.listId);
-      return items.map((e) => e.name).toList();
-    } catch (e) {
-      return [];
     }
   }
 
@@ -124,31 +117,23 @@ class _AddItemScreenState extends State<AddItemScreen> {
     }
 
     // Show a small hint that we're listening
-    Get.snackbar(
-      'Listening...',
-      'Speak the name of the item you want to add',
-      snackPosition: SnackPosition.TOP,
-      backgroundColor: Colors.blue.shade100,
-      icon: const Icon(Icons.mic_rounded, color: Colors.blue),
-      duration: const Duration(seconds: 2),
-    );
+    SnackbarService.showInfo('Listening...', 'Speak the item name');
 
     if (!(await _voiceService.initialize())) {
-      Get.snackbar('Error', 'Voice recognition not available',
-          backgroundColor: Colors.redAccent, colorText: Colors.white);
+      HapticFeedback.vibrate();
+      SnackbarService.showError('Error', 'Voice recognition not available');
       return;
     }
 
+    HapticFeedback.mediumImpact();
     await _voiceService.startListening(
       onResult: (text) async {
         if (text.isNotEmpty) {
           _nameController.text = text;
           // Auto-categorize as they speak (if they pause)
           if (!_isListening) {
-            final category = await AIService.categorizeItem(text);
-            setState(() {
-              _selectedCategory = category;
-              _selectedStoreAisle = _getAisleForCategory(category);
+             setState(() {
+              _selectedStoreAisle = _getAisleForCategory(_selectedCategory!);
             });
           }
         }
@@ -161,45 +146,6 @@ class _AddItemScreenState extends State<AddItemScreen> {
     );
   }
 
-  Future<void> _handleImageInput(ImageSource source) async {
-    PermissionStatus status = PermissionStatus.granted;
-    if (!kIsWeb) {
-      status = source == ImageSource.camera
-          ? await Permission.camera.request()
-          : await Permission.photos.request();
-    }
-
-    if (status.isDenied) return;
-
-    try {
-      final XFile? image = await _imagePicker.pickImage(source: source);
-      if (image != null) {
-        setState(() => _isUploadingImage = true);
-
-        Get.snackbar('Analyzing', 'Identifying item...',
-            showProgressIndicator: true, backgroundColor: Colors.blueAccent, colorText: Colors.white);
-
-        final suggestion = await AIService.suggestItemFromImage(image.path);
-
-        _nameController.text = suggestion;
-        final category = await AIService.categorizeItem(suggestion);
-
-        // Upload to Supabase
-        final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
-        final url = await SupabaseService.uploadImage(image.path, fileName);
-
-        setState(() {
-          _imageUrl = url;
-          _selectedCategory = category;
-          _selectedStoreAisle = _getAisleForCategory(category);
-          _isUploadingImage = false;
-        });
-      }
-    } catch (e) {
-      setState(() => _isUploadingImage = false);
-      Get.snackbar('Error', 'Failed to analyze or upload image');
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -212,7 +158,10 @@ class _AddItemScreenState extends State<AddItemScreen> {
           centerTitle: true,
           actions: [
             IconButton(
-              onPressed: _addItem,
+              onPressed: () {
+                HapticFeedback.mediumImpact();
+                _addItem();
+              },
               icon: const Icon(Icons.check_rounded),
               color: colorScheme.primary,
             ),
@@ -230,7 +179,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
                 icon: Icons.shopping_bag_outlined,
                 onChanged: _loadMLSuggestions,
                 suffix: _buildMediaActions(),
-              ),
+              ).animate().fadeIn(duration: const Duration(milliseconds: 400)).slideX(begin: 0.1),
               if (_imageUrl != null) ...[
                 const SizedBox(height: 12),
                 ClipRRect(
@@ -265,24 +214,28 @@ class _AddItemScreenState extends State<AddItemScreen> {
                       label: 'Unit',
                       value: _selectedUnit,
                       items: _units,
-                      onChanged: (v) => setState(() => _selectedUnit = v),
+                      onChanged: (v) {
+                        HapticFeedback.selectionClick();
+                        setState(() => _selectedUnit = v);
+                      },
                     ),
                   ),
                 ],
-              ),
+              ).animate().fadeIn(delay: const Duration(milliseconds: 200)).slideX(begin: 0.1),
               const SizedBox(height: 20),
               _buildModernDropdown(
                 label: 'Category',
                 value: _selectedCategory,
                 items: _categories,
                 onChanged: (v) {
+                  HapticFeedback.selectionClick();
                   setState(() {
                     _selectedCategory = v;
                     _selectedStoreAisle = _getAisleForCategory(v!);
                   });
                 },
                 prefixIcon: Icons.category_outlined,
-              ),
+              ).animate().fadeIn(delay: const Duration(milliseconds: 400)).slideX(begin: 0.1),
               const SizedBox(height: 20),
               _buildModernTextField(
                 controller: _notesController,
@@ -308,7 +261,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
                     style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
-              ).animate().scale(delay: const Duration(milliseconds: 400)),
+              ).animate()
+                .scale(delay: const Duration(milliseconds: 600), duration: const Duration(milliseconds: 400), curve: Curves.easeOutBack)
+                .shimmer(delay: const Duration(milliseconds: 1200), duration: const Duration(seconds: 2)),
               const SizedBox(height: 32),
               _buildQuickAddSection(),
             ],
@@ -389,7 +344,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          value: value,
+          initialValue: value,
           onChanged: onChanged,
           icon: const Icon(Icons.expand_more_rounded),
           style: GoogleFonts.outfit(
@@ -412,7 +367,6 @@ class _AddItemScreenState extends State<AddItemScreen> {
       ],
     );
   }
-
   Widget _buildMediaActions() {
     final colorScheme = Theme.of(context).colorScheme;
     return Row(
@@ -424,104 +378,113 @@ class _AddItemScreenState extends State<AddItemScreen> {
           color: _isListening ? Colors.red : colorScheme.primary,
           onPressed: _isListening ? _voiceService.stopListening : _startVoiceInput,
         ),
-        IconButton(
-          tooltip: 'AI Scan',
-          icon: Icon(Icons.center_focus_strong_rounded, color: colorScheme.primary),
-          onPressed: () async {
-            final result = await Get.toNamed('/object-detection/${widget.listId}');
-            if (result != null && result is Map<String, dynamic>) {
-              _nameController.text = result['name'];
-              final category = await AIService.categorizeItem(result['name']);
-              setState(() {
-                _selectedCategory = category;
-                _selectedStoreAisle = _getAisleForCategory(category);
-              });
-            }
-          },
-        ).animate(onPlay: (controller) => controller.repeat())
-         .shimmer(duration: const Duration(seconds: 2), color: colorScheme.primary.withOpacity(0.3)),
-        if (_isUploadingImage)
-          const Padding(
-            padding: EdgeInsets.all(8.0),
-            child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-          )
-        else
-          PopupMenuButton<ImageSource>(
-            tooltip: 'Add Photo',
-            icon: Icon(Icons.add_a_photo_outlined, color: colorScheme.primary),
-            onSelected: _handleImageInput,
-            itemBuilder: (ctx) => [
-              const PopupMenuItem(value: ImageSource.camera, child: Text('Take Photo')),
-              const PopupMenuItem(value: ImageSource.gallery, child: Text('Choose Gallery')),
-            ],
-          ),
       ],
     );
   }
-
   Widget _buildSmartSuggestions() {
-    if (_mlSuggestions.isEmpty && !_isLoadingSuggestions) return const SizedBox.shrink();
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colorScheme.primaryContainer.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colorScheme.primary.withValues(alpha: 0.1)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.auto_awesome_rounded, size: 14, color: colorScheme.primary),
-              const SizedBox(width: 6),
-              Text('SMART SUGGESTIONS',
-                  style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
-              if (_isLoadingSuggestions) ...[
-                const SizedBox(width: 8),
-                const SizedBox(width: 8, height: 8, child: CircularProgressIndicator(strokeWidth: 2)),
-              ],
-            ],
+    if (_mlSuggestions.isEmpty && !_isLoadingSuggestions) {
+      return _buildQuickAddSection();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Suggestions',
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade600,
+                  fontSize: 12,
+                )),
+            if (_isLoadingSuggestions)
+              const Padding(
+                padding: EdgeInsets.only(left: 8.0),
+                child: SizedBox(
+                  width: 10,
+                  height: 10,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 40,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: _mlSuggestions.length,
+            itemBuilder: (context, index) {
+              final suggestion = _mlSuggestions[index];
+              return Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: ActionChip(
+                  label: Text(suggestion),
+                  onPressed: () async {
+                    HapticFeedback.lightImpact();
+                    _nameController.text = suggestion;
+                    _nameController.selection = TextSelection.fromPosition(
+                        TextPosition(offset: suggestion.length));
+
+                    final category = await AIService.categorizeItem(suggestion);
+                    setState(() {
+                      if (category != null) {
+                        _selectedCategory = category;
+                        _selectedStoreAisle = _getAisleForCategory(category);
+                      }
+                      _mlSuggestions = [];
+                    });
+
+                    AIService.trackTypingPattern(suggestion, suggestion);
+                  },
+                  backgroundColor: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                  side: BorderSide.none,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                ),
+              );
+            },
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: _mlSuggestions.map((s) => ActionChip(
-              label: Text(s, style: const TextStyle(fontSize: 12)),
-              onPressed: () async {
-                _nameController.text = s;
-                final cat = await AIService.categorizeItem(s);
-                setState(() => _selectedCategory = cat);
-              },
-              backgroundColor: colorScheme.surface,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            )).toList(),
-          ),
-        ],
-      ),
+        ),
+      ],
     ).animate().fadeIn().slideY(begin: 0.1);
   }
 
   Widget _buildQuickAddSection() {
+    final learned = AIService.getRecentLearnedItems();
+    final staticItems = ['Milk', 'Eggs', 'Bread', 'Butter', 'Cheese', 'Apples', 'Banana'];
+
+    // Combine items, remove duplicates from static if they are in learned
+    final combinedItems = [...learned, ...staticItems.where((e) => !learned.contains(e))].take(10).toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Quick Add', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.grey)),
+        Text(learned.isNotEmpty ? 'Recently Added & Popular' : 'Quick Add',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.grey)),
         const SizedBox(height: 12),
         Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: ['Milk', 'Eggs', 'Bread', 'Butter', 'Cheese', 'Apples', 'Banana']
+          spacing: 12,
+          runSpacing: 10,
+          children: combinedItems
               .map((e) => ActionChip(
                     label: Text(e),
+                    avatar: learned.contains(e) ? const Icon(Icons.history_rounded, size: 14) : null,
                     onPressed: () async {
+                      HapticFeedback.lightImpact();
                       _nameController.text = e;
-                      final cat = await AIService.categorizeItem(e);
-                      setState(() => _selectedCategory = cat);
+                      final category = await AIService.categorizeItem(e);
+                      setState(() {
+                         if (category != null) {
+                          _selectedCategory = category;
+                          _selectedStoreAisle = _getAisleForCategory(category);
+                        }
+                      });
                     },
-                    backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                    backgroundColor: learned.contains(e)
+                      ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.2)
+                      : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    side: BorderSide.none,
                   ))
               .toList(),
         ),
@@ -533,12 +496,13 @@ class _AddItemScreenState extends State<AddItemScreen> {
     return _aisles.contains(category) ? category : 'Pantry';
   }
 
-  void _addItem() {
+  void _addItem() async {
     if (_nameController.text.isEmpty) return;
 
+    final name = _nameController.text;
     final result = {
       'id': widget.item?.id ?? const Uuid().v4(),
-      'name': _nameController.text,
+      'name': name,
       'category': _selectedCategory,
       'quantity': int.tryParse(_quantityController.text) ?? 1,
       'unit': _selectedUnit,
@@ -547,9 +511,48 @@ class _AddItemScreenState extends State<AddItemScreen> {
       'image_url': _imageUrl,
       'store_aisle': _selectedStoreAisle,
     };
-    // Track for ML learning
-    AIService.trackTypingPattern(_nameController.text.substring(0, min(3, _nameController.text.length)), _nameController.text);
 
-    Get.back(result: result);
+    if (widget.item == null) {
+      // New item mode: Save directly and stay on screen for continuous entry
+      try {
+        final newItem = GroceryItem(
+          id: result['id'] as String,
+          name: result['name'] as String,
+          category: result['category'] as String,
+          quantity: (result['quantity'] as num).toInt(),
+          unit: result['unit'] as String,
+          notes: (result['notes'] as String?) ?? '',
+          listId: widget.listId,
+          isChecked: false,
+          storeAisle: (result['store_aisle'] as String?) ?? 'Other',
+          imageUrl: _imageUrl,
+        );
+
+        await _repository.addGroceryItem(newItem);
+        await AIService.learnItem(name, _selectedCategory); // Learn for future suggestions
+
+        // Notify parent list to refresh in background
+        Get.find<NavigationController>().triggerDataRefresh();
+
+        // Immediate physical/visual feedback
+        HapticFeedback.mediumImpact();
+        SnackbarService.showSimple('"$name" added');
+
+        // Clear fields for next item
+        setState(() {
+          _nameController.clear();
+          _notesController.clear();
+          _quantity = 1;
+          _quantityController.text = '1';
+        });
+      } catch (e) {
+        SnackbarService.showError('Error', 'Failed to add item: $e');
+      }
+    } else {
+      // Edit mode: Pop back with result (parent handles update)
+      Get.back(result: result);
+    }
   }
 }
+
+

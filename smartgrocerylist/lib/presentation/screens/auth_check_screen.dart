@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:smartgrocerylist/controllers/auth_controller.dart';
 
 class AuthCheckScreen extends StatefulWidget {
   const AuthCheckScreen({super.key});
@@ -19,27 +18,13 @@ class _AuthCheckScreenState extends State<AuthCheckScreen> {
 
   Future<void> _checkAuthStatus() async {
     await Future.delayed(
-      const Duration(milliseconds: 500),
-    ); // Small delay for smooth transition
+      const Duration(milliseconds: 50),
+    ); // Minimal delay for transition
 
     if (mounted) {
-      final authController = Get.find<AuthController>();
-
-      final isFirstTime = await authController.isFirstTime();
-
-      if (isFirstTime) {
-        Get.offAllNamed('/signin');
-      } else {
-        final isLoggedIn = await authController.isLoggedIn();
-        final prefs = await SharedPreferences.getInstance();
-        final isGuest = prefs.getBool('isGuest') ?? false;
-
-        if (isLoggedIn || isGuest) {
-          Get.offAllNamed('/home');
-        } else {
-          Get.offAllNamed('/signin');
-        }
-      }
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isGuest', true);
+      Get.offAllNamed('/home');
     }
   }
 
@@ -48,3 +33,4 @@ class _AuthCheckScreenState extends State<AuthCheckScreen> {
     return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
+

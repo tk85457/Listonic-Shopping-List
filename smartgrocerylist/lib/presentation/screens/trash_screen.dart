@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:smartgrocerylist/controllers/navigation_controller.dart';
-import 'package:smartgrocerylist/core/themes/app_theme.dart';
-import 'package:smartgrocerylist/data/models/models.dart';
-import 'package:smartgrocerylist/data/repositories/grocery_repository.dart';
+import 'package:grocerylist/controllers/navigation_controller.dart';
+import 'package:grocerylist/core/services/snackbar_service.dart';
+import 'package:grocerylist/data/models/models.dart';
+import 'package:grocerylist/data/repositories/grocery_repository.dart';
 
 class TrashScreen extends StatefulWidget {
   const TrashScreen({super.key});
@@ -15,242 +15,286 @@ class TrashScreen extends StatefulWidget {
 }
 
 class _TrashScreenState extends State<TrashScreen> {
-  final GroceryRepository _repository = GroceryRepository();
+  final _repo = GroceryRepository();
   List<ShoppingList> _activeLists = [];
-  List<TrashItem> _cachedTrashItems = [];
-  Worker? _refreshWorker;
+  List<TrashItem> _items = [];
+  Worker? _worker;
 
   @override
   void initState() {
     super.initState();
-    _loadTrashedItems();
-    _refreshWorker = ever(
-      Get.find<NavigationController>().refreshTrash,
-      (_) => _loadTrashedItems(),
-    );
+    _load();
+    _worker = ever(Get.find<NavigationController>().refreshTrash, (_) => _load());
   }
 
-  Future<void> _loadTrashedItems() async {
-    final trashedLists = await _repository.getTrashedShoppingLists();
-    final trashedItems = await _repository.getAllTrashedGroceryItems();
-    final activeLists = await _repository.getAllShoppingLists();
-
-    setState(() {
-      _activeLists = activeLists;
-      _updateElements(trashedLists, trashedItems);
-    });
+  @override
+  void dispose() {
+    _worker?.dispose();
+    super.dispose();
   }
 
-  void _updateElements(List<ShoppingList> trashedLists, List<GroceryItem> trashedItems) {
-    final List<TrashItem> items = [];
+  Future<void> _load() async {
+    final lists = await _repo.getTrashedShoppingLists();
+    final groceries = await _repo.getAllTrashedGroceryItems();
+    final active = await _repo.getAllShoppingLists();
 
-    // Create map for easy list name lookup
-    final Map<String, String> listNames = {
-      for (var l in _activeLists) l.id: l.name,
-      for (var l in trashedLists) l.id: l.name,
+    final nameMap = {
+      for (var l in active) l.id: l.name,
+      for (var l in lists) l.id: l.name,
     };
 
-    for (var list in trashedLists) {
-      items.add(TrashItem(
-        id: list.id,
-        name: list.name,
+    final combined = <TrashItem>[];
+    for (final l in lists) {
+      combined.add(TrashItem(
+        id: l.id,
+        name: l.name,
         listName: 'Your Lists',
-        deletedAt: list.deletedAt ?? list.lastModified,
+        deletedAt: l.deletedAt ?? l.lastModified,
         type: 'list',
-        originalData: list.toMap(),
+        originalData: l.toMap(),
       ));
     }
-    for (var item in trashedItems) {
-      items.add(TrashItem(
-        id: item.id,
-        name: item.name,
-        listName: listNames[item.listId] ?? 'Unknown List',
-        deletedAt: item.deletedAt ?? item.addedDate,
+    for (final g in groceries) {
+      combined.add(TrashItem(
+        id: g.id,
+        name: g.name,
+        listName: nameMap[g.listId] ?? 'Unknown List',
+        deletedAt: g.deletedAt ?? g.addedDate,
         type: 'item',
-        originalData: item.toMap(),
+        originalData: g.toMap(),
       ));
     }
-    items.sort((a, b) => b.deletedAt.compareTo(a.deletedAt));
-    setState(() {
-      _cachedTrashItems = items;
-    });
+    combined.sort((a, b) => b.deletedAt.compareTo(a.deletedAt));
+
+    if (mounted) {
+      setState(() {
+        _activeLists = active;
+        _items = combined;
+      });
+    }
   }
 
   Future<void> _restore(TrashItem item) async {
-    try {
-      if (item.type == 'item') {
-        // Find listId from original data
-        final String? listId = item.originalData?['list_id'] ?? item.originalData?['listId'];
-
-        // Check if parent list is still active
-        if (listId != null) {
-          final parentIsActive = _activeLists.any((l) => l.id == listId);
-          if (!parentIsActive) {
-            Get.snackbar(
-              'Cannot Restore',
-              'Please restore the parent list first.',
-              backgroundColor: Colors.orange,
-              colorText: Colors.white,
-              snackPosition: SnackPosition.BOTTOM,
-            );
-            return;
-          }
-        }
-        await _repository.restoreGroceryItem(item.id);
-      } else {
-        await _repository.restoreShoppingList(item.id);
+    if (item.type == 'item') {
+      final listId = item.originalData?['list_id'] ?? item.originalData?['listId'];
+      if (listId != null && !_activeLists.any((l) => l.id == listId)) {
+        SnackbarService.showWarning(
+          'Cannot Restore',
+          'Restore the parent list first',
+        );
+        return;
       }
-
-      await _loadTrashedItems();
-
-      // Trigger navigation refresh
-      Get.find<NavigationController>().triggerTrashRefresh();
-
-      Get.snackbar('Restored', '${item.name} is back!',
-          backgroundColor: Theme.of(context).colorScheme.primary, colorText: Colors.white);
-    } catch (e) {
-      Get.snackbar('Error', 'Failed to restore: $e');
+      await _repo.restoreGroceryItem(item.id);
+    } else {
+      await _repo.restoreShoppingList(item.id);
     }
+    await _load();
+    Get.find<NavigationController>().triggerTrashRefresh();
+    SnackbarService.showSuccess('Restored', '"${item.name}" is back');
   }
 
-  Future<void> _deletePermanently(TrashItem item) async {
-    try {
-      if (item.type == 'list') {
-        await _repository.deleteShoppingList(item.id);
-      } else {
-        await _repository.deleteGroceryItem(item.id);
-      }
-      await _loadTrashedItems();
-      Get.snackbar('Deleted', '${item.name} removed permanently',
-          backgroundColor: Colors.redAccent, colorText: Colors.white);
-    } catch (e) {
-      Get.snackbar('Error', 'Failed to delete');
+  Future<void> _deletePerm(TrashItem item) async {
+    if (item.type == 'list') {
+      await _repo.deleteShoppingList(item.id);
+    } else {
+      await _repo.deleteGroceryItem(item.id);
     }
+    await _load();
+    SnackbarService.showError('Deleted', '"${item.name}" permanently deleted');
   }
 
-  String _timeAgo(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inDays > 0) return '${diff.inDays}d ago';
-    if (diff.inHours > 0) return '${diff.inHours}h ago';
-    return '${diff.inMinutes}m ago';
+  void _confirmEmptyTrash() {
+    Get.dialog(
+      AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text('Empty Trash?',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+        content: Text(
+          'All items will be permanently deleted. This cannot be undone.',
+          style: GoogleFonts.outfit(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: Get.back,
+            child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Get.back();
+              await _repo.emptyTrash();
+              _load();
+              SnackbarService.showInfo('Trash Emptied', 'All items permanently deleted');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              minimumSize: const Size(0, 40),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text('Empty All', style: GoogleFonts.outfit()),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final cs = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('Trash Bin', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+        title: Text('Trash',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
         actions: [
-          if (_cachedTrashItems.isNotEmpty)
+          if (_items.isNotEmpty)
             TextButton(
-              onPressed: _showEmptyConfirm,
-              child: const Text('Empty', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+              onPressed: _confirmEmptyTrash,
+              child: Text('Empty',
+                  style: GoogleFonts.outfit(
+                      color: Colors.redAccent, fontWeight: FontWeight.w600)),
             ),
         ],
       ),
-      body: _cachedTrashItems.isEmpty ? _buildEmptyState() : _buildList(),
+      body: _items.isEmpty ? _empty(cs) : _list(cs),
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _empty(ColorScheme cs) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.all(32),
+            width: 100,
+            height: 100,
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.delete_sweep_rounded, size: 80, color: Colors.grey),
-          ).animate().scale(duration: const Duration(milliseconds: 600), curve: Curves.easeOutBack),
-          const SizedBox(height: 24),
-          Text('Nothing here', style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.bold)),
-          const Text('Deleted items stay here for 30 days.'),
+            child: const Icon(Icons.delete_sweep_rounded, size: 48, color: Colors.grey),
+          )
+              .animate()
+              .scale(duration: 600.ms, curve: Curves.easeOutBack),
+          const SizedBox(height: 20),
+          Text('Trash is empty',
+              style: GoogleFonts.outfit(
+                  fontSize: 20, fontWeight: FontWeight.w700)).animate().fadeIn(delay: 200.ms),
+          const SizedBox(height: 6),
+          Text('Deleted items appear here for 30 days.',
+              style: GoogleFonts.outfit(fontSize: 13, color: Colors.grey)).animate().fadeIn(delay: 350.ms),
         ],
       ),
     );
   }
 
-  Widget _buildList() {
+  Widget _list(ColorScheme cs) {
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _cachedTrashItems.length,
-      itemBuilder: (ctx, idx) {
-        final item = _cachedTrashItems[idx];
-        return _buildTrashTile(item).animate().fadeIn(delay: Duration(milliseconds: idx * 50)).slideX(begin: 0.1);
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      itemCount: _items.length,
+      itemBuilder: (_, i) {
+        final item = _items[i];
+        return _TrashTile(
+          item: item,
+          onRestore: () => _restore(item),
+          onDelete: () => _deletePerm(item),
+        ).animate().fadeIn(delay: Duration(milliseconds: i * 30)).slideX(begin: 0.1);
       },
     );
   }
+}
 
-  Widget _buildTrashTile(TrashItem item) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: (item.type == 'list' ? Colors.blue : Colors.orange).withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(
-            item.type == 'list' ? Icons.list_alt_rounded : Icons.shopping_basket_rounded,
-            color: item.type == 'list' ? Colors.blue : Colors.orange,
-          ),
-        ),
-        title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('From: ${item.listName}', style: const TextStyle(fontSize: 12)),
-            Text('Deleted ${_timeAgo(item.deletedAt)}', style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant)),
-          ],
-        ),
-        trailing: PopupMenuButton<String>(
-          onSelected: (v) => v == 'res' ? _restore(item) : _deletePermanently(item),
-          itemBuilder: (ctx) => [
-            const PopupMenuItem(value: 'res', child: Row(children: [Icon(Icons.restore_rounded, size: 18), SizedBox(width: 8), Text('Restore')])),
-            const PopupMenuItem(value: 'del', child: Row(children: [Icon(Icons.delete_forever_rounded, size: 18, color: Colors.red), SizedBox(width: 8), Text('Delete FOREVER', style: TextStyle(color: Colors.red))])),
-          ],
-        ),
-      ),
-    );
-  }
+// ──────────────────────────────────────────────────────────────────────────────
+class _TrashTile extends StatelessWidget {
+  final TrashItem item;
+  final VoidCallback onRestore;
+  final VoidCallback onDelete;
+  const _TrashTile({required this.item, required this.onRestore, required this.onDelete});
 
-  void _showEmptyConfirm() {
-    Get.dialog(
-      AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Text('Empty Trash?'),
-        content: const Text('This will permanently delete all items. This cannot be undone.'),
-        actions: [
-          TextButton(onPressed: () => Get.back(), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              Get.back();
-              await _repository.emptyTrash(); // Ensure this method exists or loop deletes
-              _loadTrashedItems();
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            child: const Text('Clear All'),
-          ),
-        ],
-      ),
-    );
+  String _ago(DateTime dt) {
+    final d = DateTime.now().difference(dt);
+    if (d.inDays > 0) return '${d.inDays}d ago';
+    if (d.inHours > 0) return '${d.inHours}h ago';
+    return '${d.inMinutes}m ago';
   }
 
   @override
-  void dispose() {
-    _refreshWorker?.dispose();
-    super.dispose();
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isList = item.type == 'list';
+    final tileColor = isList ? Colors.blueAccent : Colors.deepOrange;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.07)
+              : Colors.black.withValues(alpha: 0.06),
+        ),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        leading: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: tileColor.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            isList ? Icons.list_alt_rounded : Icons.shopping_basket_rounded,
+            color: tileColor,
+            size: 22,
+          ),
+        ),
+        title: Text(item.name,
+            style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 15),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('From: ${item.listName}',
+                style: GoogleFonts.outfit(fontSize: 12, color: cs.onSurfaceVariant)),
+            Text('Deleted ${_ago(item.deletedAt)}',
+                style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
+          ],
+        ),
+        trailing: PopupMenuButton<String>(
+          padding: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          onSelected: (v) => v == 'res' ? onRestore() : onDelete(),
+          itemBuilder: (_) => [
+            PopupMenuItem(
+              value: 'res',
+              height: 42,
+              child: Row(children: [
+                Icon(Icons.restore_rounded, size: 18, color: cs.primary),
+                const SizedBox(width: 10),
+                Text('Restore', style: GoogleFonts.outfit(fontSize: 14)),
+              ]),
+            ),
+            PopupMenuItem(
+              value: 'del',
+              height: 42,
+              child: Row(children: [
+                const Icon(Icons.delete_forever_rounded, size: 18, color: Colors.redAccent),
+                const SizedBox(width: 10),
+                Text('Delete Forever',
+                    style: GoogleFonts.outfit(fontSize: 14, color: Colors.redAccent)),
+              ]),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
+

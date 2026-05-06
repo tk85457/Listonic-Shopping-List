@@ -77,6 +77,17 @@
 -keep class com.google.android.gms.tasks.** { *; }
 -dontwarn com.google.android.gms.**
 
+# Google Mobile Ads (AdMob)
+-keep class com.google.android.gms.ads.** { *; }
+-keep class com.google.ads.** { *; }
+-dontwarn com.google.android.gms.ads.**
+-keep class com.google.android.gms.ads.identifier.** { *; }
+-keep public class com.google.android.gms.ads.MobileAds { *; }
+-keep public class com.google.android.gms.ads.AdRequest { *; }
+-keep public class com.google.android.gms.ads.AdView { *; }
+-keep class io.flutter.plugins.googlemobileads.** { *; }
+-dontwarn io.flutter.plugins.googlemobileads.**
+
 # Gson (used by many plugins)
 -keepattributes Signature
 -keepattributes *Annotation*
@@ -88,4 +99,5 @@
 -keep class * implements com.google.gson.JsonDeserializer
 
 # Keep all model classes (add your package name)
--keep class com.smartgrocery.smartgrocerylis.** { *; }
+-keep class com.tk854.listonic.** { *; }
+
