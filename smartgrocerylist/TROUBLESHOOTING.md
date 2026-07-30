@@ -55,5 +55,5 @@ Based on the images you uploaded, there are two configuration issues in your Sup
 
 > [!NOTE]
 > Also ensure that in **Supabase Dashboard** > **Authentication** > **URL Configuration**, you have added your app's deep link:
-> `com.tk854.grocerylist://login-callback`
+> `com.list.listonic://login-callback`
 

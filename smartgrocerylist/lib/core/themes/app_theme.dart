@@ -24,8 +24,8 @@ class AppTheme {
   // ─── Light Palette ────────────────────────────────────────────
   static const Color lightBg = Color(0xFFF7F8FC);
   static const Color lightSurface = Colors.white;
-  static const Color lightText = Color(0xFF0D1117);
-  static const Color lightTextMuted = Color(0xFF6B7280);
+  static const Color lightText = Color(0xFF000000);
+  static const Color lightTextMuted = Color(0xFF000000);
 
   // ─── Dark Palette ─────────────────────────────────────────────
   static const Color darkBg = Color(0xFF0A0E1A);
@@ -69,19 +69,21 @@ class AppTheme {
     final surface = isDark ? darkSurface : lightSurface;
     final cardColor = isDark ? darkCard : lightSurface;
     final textColor = isDark ? darkText : lightText;
-    final mutedColor = isDark ? darkTextMuted : lightTextMuted;
+    final mutedColor = isDark ? darkTextMuted : lightText;
     final baseText = _buildTextTheme(fontFamily, textColor, mutedColor, fontSizeFactor);
 
     return ThemeData(
       useMaterial3: true,
       brightness: isDark ? Brightness.dark : Brightness.light,
       primaryColor: primary,
+      fontFamily: GoogleFonts.getFont(fontFamily).fontFamily,
       colorScheme: ColorScheme.fromSeed(
         seedColor: primary,
         primary: primary,
         brightness: isDark ? Brightness.dark : Brightness.light,
         surface: surface,
         onSurface: textColor,
+        onSurfaceVariant: isDark ? null : textColor,
         surfaceContainerHighest: isDark
             ? Colors.white.withValues(alpha: 0.08)
             : Colors.black.withValues(alpha: 0.05),
@@ -207,6 +209,7 @@ class AppTheme {
           fontFamily,
           fontSize: 13 * fontSizeFactor,
           fontWeight: FontWeight.w500,
+          color: textColor,
         ),
         side: BorderSide.none,
         shape: RoundedRectangleBorder(

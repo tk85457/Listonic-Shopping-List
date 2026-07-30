@@ -30,7 +30,7 @@ subprojects {
             androidExtension.javaClass.methods.firstOrNull {
                 it.name == "setNamespace" && it.parameterCount == 1
             } ?: return@afterEvaluate
-        val fallbackNamespace = "com.tk854.listonic.${project.name.replace('-', '_')}"
+        val fallbackNamespace = "com.list.listonic.${project.name.replace('-', '_')}"
         setNamespace.invoke(androidExtension, fallbackNamespace)
     }
 }

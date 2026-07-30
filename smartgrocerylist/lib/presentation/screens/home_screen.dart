@@ -11,6 +11,7 @@ import 'package:grocerylist/core/services/permission_service.dart';
 import 'package:grocerylist/core/services/share_service.dart';
 import 'package:grocerylist/data/models/models.dart';
 import 'package:grocerylist/core/services/snackbar_service.dart';
+import 'package:grocerylist/core/services/ad_service.dart';
 import 'package:grocerylist/data/repositories/grocery_repository.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -468,16 +469,47 @@ class _HomeScreenState extends State<HomeScreen> {
       createdDate: DateTime.now(),
       lastModified: DateTime.now(),
     );
-    await _repo.addShoppingList(list);
-    await _loadLists();
-    SnackbarService.showSimple('"$name" created');
+    
+    try {
+      AdService().showInterstitialAd(
+        onComplete: () async {
+          await _repo.addShoppingList(list);
+          await _loadLists();
+          SnackbarService.showSimple('"$name" created');
+        },
+      );
+    } catch (e) {
+      debugPrint('📢 Interstitial Ad show exception: $e');
+      await _repo.addShoppingList(list);
+      await _loadLists();
+      SnackbarService.showSimple('"$name" created');
+    }
   }
 
   void _deleteList(String id) async {
-    _lastDeleted = _lists.firstWhere((l) => l.id == id);
-    await _repo.softDeleteShoppingList(id);
-    await _loadLists();
-    Get.find<NavigationController>().triggerTrashRefresh();
+    _lastDeleted = _lists.cast<ShoppingList?>().firstWhere((l) => l!.id == id, orElse: () => null);
+    if (_lastDeleted == null) return;
+    
+    try {
+      AdService().showInterstitialAd(
+        onComplete: () async {
+          await _repo.softDeleteShoppingList(id);
+          await _loadLists();
+          Get.find<NavigationController>().triggerTrashRefresh();
+          _showDeleteSnackbar();
+        },
+      );
+    } catch (e) {
+      debugPrint('📢 Interstitial Ad show exception: $e');
+      await _repo.softDeleteShoppingList(id);
+      await _loadLists();
+      Get.find<NavigationController>().triggerTrashRefresh();
+      _showDeleteSnackbar();
+    }
+  }
+
+  void _showDeleteSnackbar() {
+    if (_lastDeleted == null) return;
     Get.snackbar(
       'Deleted',
       '"${_lastDeleted!.name}" moved to trash',
@@ -704,6 +736,7 @@ class _ListCard extends StatelessWidget {
 
   String _timeAgo(DateTime d) {
     final diff = DateTime.now().difference(d);
+    if (diff.inMinutes < 1) return 'Just now';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     if (diff.inDays < 7) return '${diff.inDays}d ago';

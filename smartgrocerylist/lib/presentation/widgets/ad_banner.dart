@@ -16,18 +16,35 @@ class _AdBannerState extends State<AdBanner> {
   int _retryCount = 0;
   static const int _maxRetries = 5;
   Timer? _retryTimer;
+  Timer? _refreshTimer;
 
   // Real Ad Unit IDs — production ready
+  static const String _primaryAdUnitId = 'ca-app-pub-3362561286987631/7469470052';
+  static const String _backupAdUnitId = 'ca-app-pub-3362561286987631/7469470052';
+
+  bool _useBackupAdUnit = false;
+
   String get _adUnitId {
-    return Platform.isAndroid
-        ? 'ca-app-pub-3362561286987631/4408118092'
-        : 'ca-app-pub-3362561286987631/4408118092'; // Same for iOS for now
+    if (Platform.isAndroid) {
+      return _useBackupAdUnit ? _backupAdUnitId : _primaryAdUnitId;
+    } else {
+      return _useBackupAdUnit ? _backupAdUnitId : _primaryAdUnitId; // Same for iOS for now
+    }
   }
 
   @override
   void initState() {
     super.initState();
     _loadAd();
+    
+    // AdMob Policy strictly requires refresh rate to be at least 30-60 seconds.
+    // Setting it to 30 seconds (minimum safe limit) to prevent instant account ban.
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted && _isLoaded) {
+        debugPrint('📢 AdBanner: Auto-refreshing banner ad...');
+        _loadAd();
+      }
+    });
   }
 
   void _loadAd() {
@@ -40,15 +57,16 @@ class _AdBannerState extends State<AdBanner> {
       });
     }
 
-    debugPrint('🔄 AdBanner: Loading ad (attempt ${_retryCount + 1})...');
+    final currentUnitId = _adUnitId;
+    debugPrint('📢 AdBanner: Attempting to load ad with unit ID: $currentUnitId');
 
     _bannerAd = BannerAd(
-      adUnitId: _adUnitId,
+      adUnitId: currentUnitId,
       request: const AdRequest(),
       size: AdSize.banner,
       listener: BannerAdListener(
         onAdLoaded: (ad) {
-          debugPrint('✅ AdBanner: Ad loaded successfully!');
+          debugPrint('✅ AdBanner: Ad loaded successfully.');
           _retryCount = 0;
           if (mounted) {
             setState(() {
@@ -57,21 +75,35 @@ class _AdBannerState extends State<AdBanner> {
           }
         },
         onAdFailedToLoad: (ad, err) {
-          debugPrint('❌ AdBanner failed to load: ${err.message} (code: ${err.code})');
+          debugPrint('❌ AdBanner: Failed to load: ${err.message} (Code: ${err.code})');
           ad.dispose();
           _bannerAd = null;
+
+          // If the primary ad unit failed, immediately switch to the backup ad unit and try loading it.
+          if (!_useBackupAdUnit) {
+            debugPrint('⚠️ AdBanner: Primary ad unit failed. Switching to backup ad unit.');
+            if (mounted) {
+              setState(() {
+                _useBackupAdUnit = true;
+              });
+              _loadAd();
+            }
+            return;
+          }
+
+          // If we are already on backup ad unit and it failed too, fall back to the retry timer with backoff.
+          // Reset backup ad unit choice for the next cycle of retries.
+          _useBackupAdUnit = false;
 
           // Retry with backoff
           if (_retryCount < _maxRetries) {
             _retryCount++;
-            final delay = Duration(seconds: _retryCount * 15); // 15s, 30s, 45s, 60s, 75s
-            debugPrint('🔄 AdBanner: Retrying in ${delay.inSeconds}s (attempt $_retryCount/$_maxRetries)...');
+            final delay = Duration(seconds: _retryCount * 15);
             _retryTimer?.cancel();
             _retryTimer = Timer(delay, () {
               if (mounted) _loadAd();
             });
           } else {
-            debugPrint('⚠️ AdBanner: Max retries reached. Will try again later.');
             // Final retry after 5 minutes
             _retryTimer?.cancel();
             _retryTimer = Timer(const Duration(minutes: 5), () {
@@ -82,15 +114,13 @@ class _AdBannerState extends State<AdBanner> {
             });
           }
         },
-        onAdOpened: (ad) => debugPrint('📱 AdBanner: Ad opened.'),
-        onAdClosed: (ad) => debugPrint('📱 AdBanner: Ad closed.'),
-        onAdImpression: (ad) => debugPrint('📱 AdBanner: Ad impression recorded.'),
       ),
     )..load();
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _retryTimer?.cancel();
     _bannerAd?.dispose();
     super.dispose();

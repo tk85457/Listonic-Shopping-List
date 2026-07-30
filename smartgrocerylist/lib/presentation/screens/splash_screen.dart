@@ -1,11 +1,10 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:grocerylist/controllers/auth_controller.dart';
+import 'dart:math' as math;
 import 'package:grocerylist/core/network/ai_service.dart';
 import 'package:grocerylist/core/themes/app_theme.dart';
 
@@ -18,7 +17,6 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
-  final AuthController authController = Get.find<AuthController>();
 
   // Saved theme color — loaded from SharedPreferences before first frame
   Color _themeColor = const Color(0xFF7C4DFF); // default Deep Purple
@@ -107,19 +105,34 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _boot() async {
-    // ── Load saved theme color BEFORE showing any UI ──────────────────
-    // This runs before AIService so the color is ready at first paint
+    final stopwatch = Stopwatch()..start();
+
+    // Start logo animation immediately so it runs during initializations
+    _logoCtrl.forward();
+
+    // Run ALL initializations in parallel — not one by one
+    await Future.wait([
+      _loadThemeColor(),
+      AIService.initializeMLModel(),
+      Future.delayed(const Duration(milliseconds: 2500)), // minimum splash time for animation
+    ]);
+
+    // Wait remaining time only if init was very fast
+    final elapsed = stopwatch.elapsedMilliseconds;
+    if (elapsed < 2800) {
+      await Future.delayed(Duration(milliseconds: 2800 - elapsed));
+    }
+
+    if (mounted) Get.offAllNamed('/home');
+  }
+
+  Future<void> _loadThemeColor() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final colorName = prefs.getString('theme_color') ?? 'Deep Purple';
       final savedColor = AppTheme.getThemeColor(colorName);
       if (mounted) setState(() => _themeColor = savedColor);
     } catch (_) {}
-
-    await AIService.initializeMLModel();
-    _logoCtrl.forward();
-    await Future.delayed(const Duration(milliseconds: 2800));
-    if (mounted) Get.offAllNamed('/auth-check');
   }
 
   @override
@@ -343,7 +356,7 @@ class _SplashScreenState extends State<SplashScreen>
                   const SizedBox(height: 44),
 
                   Text(
-                        'Listonic - Shopping List',
+                        'SmartCart - AI Shopping List',
                         style: GoogleFonts.outfit(
                           fontSize: 38,
                           fontWeight: FontWeight.w900,

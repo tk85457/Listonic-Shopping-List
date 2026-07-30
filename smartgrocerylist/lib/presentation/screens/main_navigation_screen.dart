@@ -42,7 +42,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           scheme: 'mailto',
           path: 'tk8545725@gmail.com',
           queryParameters: {
-            'subject': 'Listonic - Shopping List Support',
+            'subject': 'SmartCart - AI Shopping List Support',
             'body': 'Describe your issue:\n\n',
           },
         );
@@ -65,7 +65,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: Text(
-          'Listonic - Shopping List',
+          'SmartCart - AI Shopping List',
           style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
         ),
         content: Column(
@@ -76,10 +76,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             const SizedBox(height: 4),
             Text(
               'Your AI-powered shopping companion.',
-              style: GoogleFonts.outfit(color: Colors.grey),
+              style: GoogleFonts.outfit(color: Theme.of(context).colorScheme.onSurface),
             ),
             const SizedBox(height: 4),
-            Text('© 2024 Listonic - Shopping List Team', style: GoogleFonts.outfit(color: Colors.grey)),
+            Text('© 2024 SmartCart - AI Shopping List Team', style: GoogleFonts.outfit(color: Theme.of(context).colorScheme.onSurface)),
           ],
         ),
         actions: [
@@ -205,7 +205,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         actions: [
           TextButton(
             onPressed: () => Get.back(result: false),
-            child: Text('Stay', style: GoogleFonts.outfit(color: Colors.grey)),
+            child: Text('Stay', style: GoogleFonts.outfit(color: Theme.of(context).colorScheme.onSurface)),
           ),
           ElevatedButton(
             onPressed: () => Get.back(result: true),
@@ -288,7 +288,7 @@ class _BottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bg = isDark ? const Color(0xFF141929) : Colors.white;
-    final muted = isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8);
+    final muted = isDark ? const Color(0xFF64748B) : const Color(0xFF000000);
 
     return Container(
       decoration: BoxDecoration(

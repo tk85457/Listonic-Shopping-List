@@ -116,7 +116,7 @@ class _TrashScreenState extends State<TrashScreen> {
         actions: [
           TextButton(
             onPressed: Get.back,
-            child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.grey)),
+            child: Text('Cancel', style: GoogleFonts.outfit(color: Theme.of(context).colorScheme.onSurface)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -183,7 +183,7 @@ class _TrashScreenState extends State<TrashScreen> {
                   fontSize: 20, fontWeight: FontWeight.w700)).animate().fadeIn(delay: 200.ms),
           const SizedBox(height: 6),
           Text('Deleted items appear here for 30 days.',
-              style: GoogleFonts.outfit(fontSize: 13, color: Colors.grey)).animate().fadeIn(delay: 350.ms),
+              style: GoogleFonts.outfit(fontSize: 13, color: Theme.of(context).colorScheme.onSurface)).animate().fadeIn(delay: 350.ms),
         ],
       ),
     );

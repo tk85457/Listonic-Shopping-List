@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:grocerylist/data/models/models.dart';
-import 'package:grocerylist/controllers/auth_controller.dart';
 import 'package:grocerylist/controllers/theme_controller.dart';
 import 'package:grocerylist/presentation/screens/splash_screen.dart';
 import 'package:grocerylist/presentation/screens/main_navigation_screen.dart';
@@ -11,14 +10,28 @@ import 'package:grocerylist/presentation/screens/add_item_screen.dart';
 import 'package:grocerylist/presentation/screens/faq_screen.dart';
 import 'package:grocerylist/presentation/screens/privacy_policy_screen.dart';
 import 'package:grocerylist/presentation/screens/trash_screen.dart';
-import 'package:grocerylist/presentation/screens/auth_check_screen.dart';
+
+import 'package:grocerylist/core/network/ai_service.dart';
+import 'package:grocerylist/core/services/ad_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await MobileAds.instance.initialize();
+  
+  // Initialize AI model to load user learned items
+  await AIService.initializeMLModel();
 
-  Get.put(AuthController(), permanent: true);
   Get.put(ThemeController(), permanent: true);
+
+  // Initialize ads in background — don't block app startup
+  MobileAds.instance.initialize().then((_) {
+    try {
+      AdService().loadInterstitialAd();
+    } catch (e) {
+      debugPrint('📢 AdService initialization exception: $e');
+    }
+  }).catchError((e) {
+    debugPrint('📢 MobileAds initialization exception: $e');
+  });
 
   runApp(const GroceryApp());
 }
@@ -39,7 +52,7 @@ class GroceryApp extends StatelessWidget {
       final themeMode = tc.currentThemeMode.value;
 
       return GetMaterialApp(
-        title: 'Listonic - Shopping List',
+        title: 'SmartCart - AI Shopping List',
         theme: tc.getLightTheme(),
         darkTheme: tc.getDarkTheme(),
         themeMode: themeMode,
@@ -47,7 +60,6 @@ class GroceryApp extends StatelessWidget {
         initialRoute: '/splash',
         getPages: [
           GetPage(name: '/splash', page: () => const SplashScreen()),
-          GetPage(name: '/auth-check', page: () => const AuthCheckScreen()),
           GetPage(name: '/home', page: () => const MainNavigationScreen()),
           GetPage(name: '/faq', page: () => const FAQScreen()),
           GetPage(

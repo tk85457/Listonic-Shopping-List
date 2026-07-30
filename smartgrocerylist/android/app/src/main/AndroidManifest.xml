@@ -4,11 +4,12 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
 
 
 
     <application
-        android:label="Listonic - Shopping List"
+        android:label="SmartCart - AI Shopping List"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true"
@@ -39,7 +40,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="com.tk854.listonic" android:host="login-callback" />
+                <data android:scheme="com.list.listonic" android:host="login-callback" />
             </intent-filter>
         </activity>
 
@@ -51,7 +52,7 @@
         
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3362561286987631~3475233818"/>
+            android:value="ca-app-pub-3362561286987631~4979038080"/>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

@@ -56,7 +56,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
       _selectedStoreAisle = AppCategories.produce;
     }
     _quantityController = TextEditingController(text: _quantity.toString());
-    AIService.initializeMLModel();
+    AIService.initializeMLModel().then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   final List<String> _categories = [
@@ -194,6 +196,10 @@ class _AddItemScreenState extends State<AddItemScreen> {
               ],
               const SizedBox(height: 12),
               _buildSmartSuggestions(),
+              if (_mlSuggestions.isEmpty) ...[
+                const SizedBox(height: 16),
+                _buildQuickAddSection(),
+              ],
               const SizedBox(height: 24),
               Row(
                 children: [
@@ -264,8 +270,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
               ).animate()
                 .scale(delay: const Duration(milliseconds: 600), duration: const Duration(milliseconds: 400), curve: Curves.easeOutBack)
                 .shimmer(delay: const Duration(milliseconds: 1200), duration: const Duration(seconds: 2)),
-              const SizedBox(height: 32),
-              _buildQuickAddSection(),
+
             ],
           ),
         ),
@@ -382,9 +387,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
     );
   }
   Widget _buildSmartSuggestions() {
-    if (_mlSuggestions.isEmpty && !_isLoadingSuggestions) {
-      return _buildQuickAddSection();
-    }
+    if (_mlSuggestions.isEmpty) return const SizedBox.shrink();
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -392,11 +397,10 @@ class _AddItemScreenState extends State<AddItemScreen> {
         Row(
           children: [
             Text('Suggestions',
-                style: GoogleFonts.outfit(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey.shade600,
-                  fontSize: 12,
-                )),
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.black)),
             if (_isLoadingSuggestions)
               const Padding(
                 padding: EdgeInsets.only(left: 8.0),
@@ -419,7 +423,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
               return Padding(
                 padding: const EdgeInsets.only(right: 8.0),
                 child: ActionChip(
-                  label: Text(suggestion),
+                  label: Text(suggestion, style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: FontWeight.w500)),
                   onPressed: () async {
                     HapticFeedback.lightImpact();
                     _nameController.text = suggestion;
@@ -437,8 +441,13 @@ class _AddItemScreenState extends State<AddItemScreen> {
 
                     AIService.trackTypingPattern(suggestion, suggestion);
                   },
-                  backgroundColor: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
-                  side: BorderSide.none,
+                  backgroundColor: isDark
+                      ? cs.primaryContainer.withValues(alpha: 0.25)
+                      : cs.primary.withValues(alpha: 0.12),
+                  side: BorderSide(
+                    color: cs.primary.withValues(alpha: isDark ? 0.4 : 0.25),
+                    width: 1,
+                  ),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                 ),
               );
@@ -450,8 +459,10 @@ class _AddItemScreenState extends State<AddItemScreen> {
   }
 
   Widget _buildQuickAddSection() {
-    final learned = AIService.getRecentLearnedItems();
+    final learned = AIService.getRecentLearnedItems().where((e) => e.trim().isNotEmpty).toList();
     final staticItems = ['Milk', 'Eggs', 'Bread', 'Butter', 'Cheese', 'Apples', 'Banana'];
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // Combine items, remove duplicates from static if they are in learned
     final combinedItems = [...learned, ...staticItems.where((e) => !learned.contains(e))].take(10).toList();
@@ -460,31 +471,36 @@ class _AddItemScreenState extends State<AddItemScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(learned.isNotEmpty ? 'Recently Added & Popular' : 'Quick Add',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.grey)),
+          style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
         const SizedBox(height: 12),
         Wrap(
           spacing: 12,
           runSpacing: 10,
           children: combinedItems
               .map((e) => ActionChip(
-                    label: Text(e),
-                    avatar: learned.contains(e) ? const Icon(Icons.history_rounded, size: 14) : null,
+                    label: Text(e, style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: FontWeight.w500)),
+                    avatar: learned.contains(e) ? Icon(Icons.history_rounded, size: 14, color: cs.onSurface) : null,
                     onPressed: () async {
                       HapticFeedback.lightImpact();
                       _nameController.text = e;
                       final category = await AIService.categorizeItem(e);
                       setState(() {
                          if (category != null) {
-                          _selectedCategory = category;
-                          _selectedStoreAisle = _getAisleForCategory(category);
-                        }
+                           _selectedCategory = category;
+                           _selectedStoreAisle = _getAisleForCategory(category);
+                         }
                       });
                     },
                     backgroundColor: learned.contains(e)
-                      ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.2)
-                      : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                      ? (isDark ? cs.primaryContainer.withValues(alpha: 0.25) : cs.primary.withValues(alpha: 0.12))
+                      : (isDark ? cs.surfaceContainerHighest.withValues(alpha: 0.4) : Colors.black.withValues(alpha: 0.06)),
+                    side: BorderSide(
+                      color: learned.contains(e)
+                          ? cs.primary.withValues(alpha: isDark ? 0.4 : 0.25)
+                          : cs.onSurface.withValues(alpha: isDark ? 0.1 : 0.08),
+                      width: 1,
+                    ),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                    side: BorderSide.none,
                   ))
               .toList(),
         ),

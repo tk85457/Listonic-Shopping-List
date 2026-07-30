@@ -1,10 +1,10 @@
 name: grocerylist
-description: "Listonic - Shopping List - AI-Powered Intelligent Shopping Assistant"
+description: "SmartCart - AI Shopping List - AI-Powered Intelligent Shopping Assistant"
 publish_to: "none"
-version: 1.0.0+1
+version: 1.0.4+5
 
 # Update package name for Android
-package_name: com.tk854.listonic
+package_name: com.list.listonic
 
 environment:
   sdk: ^3.10.4
@@ -23,8 +23,6 @@ dependencies:
 
   # Database & Storage
   shared_preferences: ^2.5.4
-  isar: ^3.1.0
-  isar_flutter_libs: ^3.1.0
   path_provider: ^2.1.2
 
   # Image & Media
@@ -57,7 +55,6 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   build_runner: ^2.4.8
-  isar_generator: ^3.1.0
   flutter_launcher_icons: ^0.14.1
 
 flutter:

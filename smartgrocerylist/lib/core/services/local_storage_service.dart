@@ -38,11 +38,15 @@ class LocalStorageService {
   }
 
   static Future<List<ShoppingList>> _getAllListsRaw() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? encoded = prefs.getString(_listsKey);
-    if (encoded == null) return [];
-    final List<dynamic> decoded = jsonDecode(encoded);
-    return decoded.map((item) => ShoppingList.fromMap(item)).toList();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? encoded = prefs.getString(_listsKey);
+      if (encoded == null) return [];
+      final List<dynamic> decoded = jsonDecode(encoded);
+      return decoded.map((item) => ShoppingList.fromMap(item)).toList();
+    } catch (e) {
+      return [];
+    }
   }
 
   static Future<void> saveShoppingList(ShoppingList list) async {
@@ -98,11 +102,15 @@ class LocalStorageService {
   }
 
   static Future<List<GroceryItem>> _getAllItemsRaw() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? encoded = prefs.getString(_itemsKey);
-    if (encoded == null) return [];
-    final List<dynamic> decoded = jsonDecode(encoded);
-    return decoded.map((item) => GroceryItem.fromMap(item)).toList();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? encoded = prefs.getString(_itemsKey);
+      if (encoded == null) return [];
+      final List<dynamic> decoded = jsonDecode(encoded);
+      return decoded.map((item) => GroceryItem.fromMap(item)).toList();
+    } catch (e) {
+      return [];
+    }
   }
 
   static Future<void> saveGroceryItem(GroceryItem item) async {

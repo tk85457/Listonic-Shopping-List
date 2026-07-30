@@ -224,7 +224,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // ── FOOTER ─────────────────────────────────────────────
             Center(
               child: Text(
-                'Listonic - Shopping List',
+                'SmartCart - AI Shopping List',
                 style: GoogleFonts.outfit(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,

@@ -99,5 +99,5 @@
 -keep class * implements com.google.gson.JsonDeserializer
 
 # Keep all model classes (add your package name)
--keep class com.tk854.listonic.** { *; }
+-keep class com.list.listonic.** { *; }
 
