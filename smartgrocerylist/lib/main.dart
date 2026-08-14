@@ -52,7 +52,7 @@ class GroceryApp extends StatelessWidget {
       final themeMode = tc.currentThemeMode.value;
 
       return GetMaterialApp(
-        title: 'SmartCart - AI Shopping List',
+        title: 'Shopping list - Grocery Planner',
         theme: tc.getLightTheme(),
         darkTheme: tc.getDarkTheme(),
         themeMode: themeMode,

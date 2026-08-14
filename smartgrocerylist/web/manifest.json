@@ -1,6 +1,6 @@
 {
-    "name": "SmartCart - AI Shopping List",
-    "short_name": "SmartCart - AI Shopping List",
+    "name": "Shopping list - Grocery Planner",
+    "short_name": "Shopping list - Grocery Planner",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

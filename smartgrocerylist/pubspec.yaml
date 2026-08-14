@@ -1,7 +1,7 @@
 name: grocerylist
-description: "SmartCart - AI Shopping List - AI-Powered Intelligent Shopping Assistant"
+description: "Shopping list - Grocery Planner - AI-Powered Intelligent Shopping Assistant"
 publish_to: "none"
-version: 1.0.4+5
+version: 1.0.6+7
 
 # Update package name for Android
 package_name: com.list.listonic

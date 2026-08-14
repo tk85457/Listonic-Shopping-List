@@ -5,7 +5,7 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = SmartCart - AI Shopping List
+PRODUCT_NAME = Shopping list - Grocery Planner
 
 // The application's bundle identifier
 PRODUCT_BUNDLE_IDENTIFIER = com.list.listonic

@@ -1,10 +1,26 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 class AdBanner extends StatefulWidget {
-  const AdBanner({super.key});
+  final String? customAdUnitId;
+  final String? customBackupAdUnitId;
+  final AdSize adSize;
+  final EdgeInsetsGeometry? margin;
+  final EdgeInsetsGeometry? padding;
+  final Color? backgroundColor;
+
+  const AdBanner({
+    super.key,
+    this.customAdUnitId,
+    this.customBackupAdUnitId,
+    this.adSize = AdSize.banner,
+    this.margin,
+    this.padding,
+    this.backgroundColor,
+  });
 
   @override
   State<AdBanner> createState() => _AdBannerState();
@@ -19,26 +35,30 @@ class _AdBannerState extends State<AdBanner> {
   Timer? _refreshTimer;
 
   // Real Ad Unit IDs — production ready
-  static const String _primaryAdUnitId = 'ca-app-pub-3362561286987631/7469470052';
-  static const String _backupAdUnitId = 'ca-app-pub-3362561286987631/7469470052';
+  static const String _defaultPrimaryAdUnitId =
+      'ca-app-pub-3362561286987631/7469470052';
+  static const String _defaultBackupAdUnitId =
+      'ca-app-pub-3362561286987631/7469470052';
 
   bool _useBackupAdUnit = false;
 
+  String get _primaryId => widget.customAdUnitId ?? _defaultPrimaryAdUnitId;
+  String get _backupId =>
+      widget.customBackupAdUnitId ?? widget.customAdUnitId ?? _defaultBackupAdUnitId;
+
   String get _adUnitId {
-    if (Platform.isAndroid) {
-      return _useBackupAdUnit ? _backupAdUnitId : _primaryAdUnitId;
-    } else {
-      return _useBackupAdUnit ? _backupAdUnitId : _primaryAdUnitId; // Same for iOS for now
+    if (Platform.isAndroid || Platform.isIOS) {
+      return _useBackupAdUnit ? _backupId : _primaryId;
     }
+    return _useBackupAdUnit ? _backupId : _primaryId;
   }
 
   @override
   void initState() {
     super.initState();
     _loadAd();
-    
-    // AdMob Policy strictly requires refresh rate to be at least 30-60 seconds.
-    // Setting it to 30 seconds (minimum safe limit) to prevent instant account ban.
+
+    // Auto-refresh banner ad every 30 seconds (minimum safe limit per AdMob policy)
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
       if (mounted && _isLoaded) {
         debugPrint('📢 AdBanner: Auto-refreshing banner ad...');
@@ -48,81 +68,113 @@ class _AdBannerState extends State<AdBanner> {
   }
 
   void _loadAd() {
-    _bannerAd?.dispose();
-    _bannerAd = null;
+    if (kIsWeb) return;
 
-    if (mounted) {
-      setState(() {
-        _isLoaded = false;
-      });
-    }
+    try {
+      _bannerAd?.dispose();
+      _bannerAd = null;
 
-    final currentUnitId = _adUnitId;
-    debugPrint('📢 AdBanner: Attempting to load ad with unit ID: $currentUnitId');
+      if (mounted) {
+        setState(() {
+          _isLoaded = false;
+        });
+      }
 
-    _bannerAd = BannerAd(
-      adUnitId: currentUnitId,
-      request: const AdRequest(),
-      size: AdSize.banner,
-      listener: BannerAdListener(
-        onAdLoaded: (ad) {
-          debugPrint('✅ AdBanner: Ad loaded successfully.');
-          _retryCount = 0;
-          if (mounted) {
-            setState(() {
-              _isLoaded = true;
-            });
-          }
-        },
-        onAdFailedToLoad: (ad, err) {
-          debugPrint('❌ AdBanner: Failed to load: ${err.message} (Code: ${err.code})');
-          ad.dispose();
-          _bannerAd = null;
+      final currentUnitId = _adUnitId;
+      debugPrint('📢 AdBanner: Attempting to load ad with unit ID: $currentUnitId');
 
-          // If the primary ad unit failed, immediately switch to the backup ad unit and try loading it.
-          if (!_useBackupAdUnit) {
-            debugPrint('⚠️ AdBanner: Primary ad unit failed. Switching to backup ad unit.');
+      _bannerAd = BannerAd(
+        adUnitId: currentUnitId,
+        request: const AdRequest(),
+        size: widget.adSize,
+        listener: BannerAdListener(
+          onAdLoaded: (ad) {
+            debugPrint('✅ AdBanner: Ad loaded successfully.');
+            _retryCount = 0;
             if (mounted) {
               setState(() {
-                _useBackupAdUnit = true;
+                _isLoaded = true;
               });
-              _loadAd();
             }
-            return;
-          }
+          },
+          onAdFailedToLoad: (ad, err) {
+            debugPrint(
+              '❌ AdBanner: Failed to load: ${err.message} (Code: ${err.code})',
+            );
+            try {
+              ad.dispose();
+            } catch (e) {
+              debugPrint('AdBanner: Error disposing failed ad: $e');
+            }
+            _bannerAd = null;
+            if (mounted) {
+              setState(() {
+                _isLoaded = false;
+              });
+            }
 
-          // If we are already on backup ad unit and it failed too, fall back to the retry timer with backoff.
-          // Reset backup ad unit choice for the next cycle of retries.
-          _useBackupAdUnit = false;
-
-          // Retry with backoff
-          if (_retryCount < _maxRetries) {
-            _retryCount++;
-            final delay = Duration(seconds: _retryCount * 15);
-            _retryTimer?.cancel();
-            _retryTimer = Timer(delay, () {
-              if (mounted) _loadAd();
-            });
-          } else {
-            // Final retry after 5 minutes
-            _retryTimer?.cancel();
-            _retryTimer = Timer(const Duration(minutes: 5), () {
+            // If primary failed, switch to backup ad unit immediately
+            if (!_useBackupAdUnit) {
+              debugPrint(
+                '⚠️ AdBanner: Primary ad unit failed. Switching to backup ad unit.',
+              );
               if (mounted) {
-                _retryCount = 0;
+                setState(() {
+                  _useBackupAdUnit = true;
+                });
                 _loadAd();
               }
-            });
-          }
-        },
-      ),
-    )..load();
+              return;
+            }
+
+            _useBackupAdUnit = false;
+
+            // Retry with exponential backoff
+            if (_retryCount < _maxRetries) {
+              _retryCount++;
+              final delay = Duration(seconds: _retryCount * 15);
+              _retryTimer?.cancel();
+              _retryTimer = Timer(delay, () {
+                if (mounted) _loadAd();
+              });
+            } else {
+              _retryTimer?.cancel();
+              _retryTimer = Timer(const Duration(minutes: 5), () {
+                if (mounted) {
+                  _retryCount = 0;
+                  _loadAd();
+                }
+              });
+            }
+          },
+          onAdOpened: (ad) => debugPrint('📢 AdBanner: Ad opened.'),
+          onAdClosed: (ad) => debugPrint('📢 AdBanner: Ad closed.'),
+          onAdImpression: (ad) =>
+              debugPrint('📢 AdBanner: Ad impression recorded.'),
+          onAdClicked: (ad) => debugPrint('📢 AdBanner: Ad clicked.'),
+        ),
+      )..load();
+    } catch (e) {
+      debugPrint('❌ AdBanner load exception: $e');
+      if (mounted) {
+        setState(() {
+          _isLoaded = false;
+          _bannerAd = null;
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
     _retryTimer?.cancel();
-    _bannerAd?.dispose();
+    try {
+      _bannerAd?.dispose();
+    } catch (e) {
+      debugPrint('AdBanner dispose error: $e');
+    }
+    _bannerAd = null;
     super.dispose();
   }
 
@@ -130,7 +182,11 @@ class _AdBannerState extends State<AdBanner> {
   Widget build(BuildContext context) {
     if (_isLoaded && _bannerAd != null) {
       return Container(
-        color: Theme.of(context).scaffoldBackgroundColor,
+        margin: widget.margin,
+        padding: widget.padding,
+        color:
+            widget.backgroundColor ??
+            Theme.of(context).scaffoldBackgroundColor,
         width: double.infinity,
         height: _bannerAd!.size.height.toDouble(),
         alignment: Alignment.center,

@@ -233,7 +233,7 @@ class _HeroCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'SmartCart - AI Shopping List does not collect or store any of your personal data. Your data stays only on your phone — always.',
+            'Shopping list - Grocery Planner does not collect or store any of your personal data. Your data stays only on your phone — always.',
             textAlign: TextAlign.center,
             style: GoogleFonts.outfit(
               fontSize: 14,

@@ -42,7 +42,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           scheme: 'mailto',
           path: 'tk8545725@gmail.com',
           queryParameters: {
-            'subject': 'SmartCart - AI Shopping List Support',
+            'subject': 'Shopping list - Grocery Planner Support',
             'body': 'Describe your issue:\n\n',
           },
         );
@@ -65,21 +65,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: Text(
-          'SmartCart - AI Shopping List',
+          'Shopping list - Grocery Planner',
           style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Version 1.2.0', style: GoogleFonts.outfit()),
+            Text('Version 1.0.6', style: GoogleFonts.outfit()),
             const SizedBox(height: 4),
             Text(
               'Your AI-powered shopping companion.',
               style: GoogleFonts.outfit(color: Theme.of(context).colorScheme.onSurface),
             ),
             const SizedBox(height: 4),
-            Text('© 2024 SmartCart - AI Shopping List Team', style: GoogleFonts.outfit(color: Theme.of(context).colorScheme.onSurface)),
+            Text('© 2024 Shopping list - Grocery Planner Team', style: GoogleFonts.outfit(color: Theme.of(context).colorScheme.onSurface)),
           ],
         ),
         actions: [

@@ -148,7 +148,7 @@ class _FAQScreenState extends State<FAQScreen> {
       scheme: 'mailto',
       path: 'tk8545725@gmail.com',
       queryParameters: {
-        'subject': 'SmartCart - AI Shopping List Support',
+        'subject': 'Shopping list - Grocery Planner Support',
         'body': 'Describe your issue:\n\n',
       },
     );

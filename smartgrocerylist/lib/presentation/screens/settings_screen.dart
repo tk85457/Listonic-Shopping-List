@@ -224,7 +224,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // ── FOOTER ─────────────────────────────────────────────
             Center(
               child: Text(
-                'SmartCart - AI Shopping List',
+                'Shopping list - Grocery Planner',
                 style: GoogleFonts.outfit(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,

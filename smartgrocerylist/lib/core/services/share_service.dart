@@ -30,11 +30,11 @@ class ShareService {
     }
 
     buffer.writeln('');
-    buffer.writeln('Shared from SmartCart - AI Shopping List 📱');
+    buffer.writeln('Shared from Shopping list - Grocery Planner 📱');
 
     await Share.share(
       buffer.toString(),
-      subject: '${list.name} - SmartCart - AI Shopping List',
+      subject: '${list.name} - Shopping list - Grocery Planner',
     );
   }
 
@@ -48,7 +48,7 @@ class ShareService {
 📝 Notes: ${item.notes.isNotEmpty ? item.notes : 'None'}
 ${item.isChecked ? '✅ Completed' : '⏳ Pending'}
 
-Shared from SmartCart - AI Shopping List 📱
+Shared from Shopping list - Grocery Planner 📱
 ''';
 
     await Share.share(text, subject: '${item.name} - Grocery Item');
@@ -56,7 +56,7 @@ Shared from SmartCart - AI Shopping List 📱
 
   static Future<void> shareApp() async {
     const text = '''
-🛒 SmartCart - AI Shopping List
+🛒 Shopping list - Grocery Planner
 
 Your AI-powered shopping assistant!
 
@@ -70,10 +70,10 @@ Your AI-powered shopping assistant!
 
 Download now: [Play Store Link]
 
-#SmartCartShoppingList #ShoppingApp #AIAssistant
+#ShoppingList #GroceryPlanner #ShoppingApp #AIAssistant
 ''';
 
-    await Share.share(text, subject: 'Check out SmartCart - AI Shopping List!');
+    await Share.share(text, subject: 'Check out Shopping list - Grocery Planner!');
   }
 
   static Future<void> shareMultipleItems(
@@ -91,7 +91,7 @@ Download now: [Play Store Link]
     }
 
     buffer.writeln('');
-    buffer.writeln('Shared from SmartCart - AI Shopping List 📱');
+    buffer.writeln('Shared from Shopping list - Grocery Planner 📱');
 
     await Share.share(buffer.toString(), subject: 'Selected Grocery Items');
   }

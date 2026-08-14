@@ -230,9 +230,12 @@ class _SplashScreenState extends State<SplashScreen>
 
             // ── Main content ───────────────────────────────────────
             Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
+              child: SizedBox(
+                width: double.infinity,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
                   AnimatedBuilder(
                     animation: Listenable.merge([
                       _logoCtrl,
@@ -355,18 +358,22 @@ class _SplashScreenState extends State<SplashScreen>
 
                   const SizedBox(height: 44),
 
-                  Text(
-                        'SmartCart - AI Shopping List',
-                        style: GoogleFonts.outfit(
-                          fontSize: 38,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                          letterSpacing: -1.5,
-                        ),
-                      )
-                      .animate()
-                      .fadeIn(delay: 600.ms, duration: 700.ms)
-                      .slideY(begin: 0.2, curve: Curves.easeOut),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Text(
+                      'Shopping List',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.outfit(
+                        fontSize: 34,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        letterSpacing: -1.0,
+                      ),
+                    ),
+                  )
+                  .animate()
+                  .fadeIn(delay: 600.ms, duration: 700.ms)
+                  .slideY(begin: 0.2, curve: Curves.easeOut),
 
                   const SizedBox(height: 10),
 
@@ -376,12 +383,12 @@ class _SplashScreenState extends State<SplashScreen>
                       _line(),
                       const SizedBox(width: 12),
                       Text(
-                        'AI-POWERED LISTS',
+                        'GROCERY PLANNER',
                         style: GoogleFonts.outfit(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: Colors.white.withValues(alpha: 0.55),
-                          letterSpacing: 3.5,
+                          color: Colors.white.withValues(alpha: 0.75),
+                          letterSpacing: 3.0,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -391,6 +398,7 @@ class _SplashScreenState extends State<SplashScreen>
                 ],
               ),
             ),
+          ),
 
             // ── Wave dots loader ───────────────────────────────────
             Positioned(
