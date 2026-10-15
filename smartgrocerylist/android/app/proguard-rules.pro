@@ -88,6 +88,23 @@
 -keep class io.flutter.plugins.googlemobileads.** { *; }
 -dontwarn io.flutter.plugins.googlemobileads.**
 
+# Unity Ads SDK + Mediation Adapter
+-keep class com.unity3d.ads.** { *; }
+-keep class com.unity3d.services.** { *; }
+-dontwarn com.unity3d.ads.**
+-dontwarn com.unity3d.services.**
+-keep class com.google.ads.mediation.unity.** { *; }
+-dontwarn com.google.ads.mediation.unity.**
+
+# Meta (Facebook) Audience Network SDK + Mediation Adapter
+-keep class com.facebook.ads.** { *; }
+-dontwarn com.facebook.ads.**
+-keep class com.google.ads.mediation.facebook.** { *; }
+-dontwarn com.google.ads.mediation.facebook.**
+# Fix R8 missing class errors for Facebook internal annotations
+-dontwarn com.facebook.infer.annotation.**
+-keep class com.facebook.infer.annotation.** { *; }
+
 # Gson (used by many plugins)
 -keepattributes Signature
 -keepattributes *Annotation*

@@ -118,9 +118,9 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
                       },
                     ),
             ),
-            const AdBanner(),
           ],
         ),
+        bottomNavigationBar: const AdBanner(),
         floatingActionButton: _isSelectionMode
             ? null
             : Padding(

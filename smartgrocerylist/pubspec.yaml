@@ -1,7 +1,7 @@
 name: grocerylist
 description: "Shopping list - Grocery Planner - AI-Powered Intelligent Shopping Assistant"
 publish_to: "none"
-version: 1.0.6+7
+version: 1.0.7+8
 
 # Update package name for Android
 package_name: com.list.listonic

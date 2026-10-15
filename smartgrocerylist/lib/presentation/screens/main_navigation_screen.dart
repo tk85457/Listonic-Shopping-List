@@ -152,25 +152,24 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               const SizedBox(width: 4),
             ],
           ),
-          body: Column(
+          body: IndexedStack(
+              index: idx,
+              children: const [
+                HomeScreen(),
+                SettingsScreen(),
+              ],
+            ),
+          bottomNavigationBar: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: IndexedStack(
-                  index: idx,
-                  children: const [
-                    HomeScreen(),
-                    SettingsScreen(),
-                  ],
-                ),
-              ),
               const AdBanner(),
+              _BottomNav(
+                items: _tabs,
+                selected: idx,
+                primary: cs.primary,
+                onTap: _nav.setSelectedTab,
+              ),
             ],
-          ),
-          bottomNavigationBar: _BottomNav(
-            items: _tabs,
-            selected: idx,
-            primary: cs.primary,
-            onTap: _nav.setSelectedTab,
           ),
         ),
       );
